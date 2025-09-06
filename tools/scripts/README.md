@@ -84,7 +84,7 @@ See also the [scripts section in package.json](./package.json#L6).
 
 - `npm run check-format` – Checks if all the code is correctly formatted with [Prettier] (`prettier . --check`).
 - `npm run format` – Formats the code using [Prettier] (`prettier . --write`).
-- `npm run lint` – Runs [ESLint]. Outputs errors to console. See [the ESLint config](./.eslintrc.cjs).
+- `npm run lint` – Runs [ESLint]. Outputs errors to console. See [the ESLint config](./eslint.config.mjs).
 - `npm run tsc` – Runs TypeScript compiler (`tsc`) only for typechecking and outputs type errors to console.
 
 <!-- links references -->
