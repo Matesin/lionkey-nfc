@@ -21,6 +21,7 @@ Desktop.ini
 **/.idea/httpRequests/
 **/.idea/dataSources/
 **/.idea/dataSources.local.xml
+**/.idea/copilot.*
 
 # common files
 *.log

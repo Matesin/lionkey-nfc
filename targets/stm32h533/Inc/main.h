@@ -28,9 +28,9 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32h5xx_hal.h"
+
 #include "stm32h5xx_nucleo.h"
 #include <stdio.h>
-#include <stdnoreturn.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -57,7 +57,7 @@ extern __IO uint32_t BspButtonState;
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
 /* Exported functions prototypes ---------------------------------------------*/
-noreturn void Error_Handler(void);
+void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 
@@ -75,6 +75,8 @@ void Status_LED_Set_Mode(Status_LED_Mode mode);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define SPI2_CS_Pin GPIO_PIN_1
+#define SPI2_CS_GPIO_Port GPIOB
 #define SWDIO_Pin GPIO_PIN_13
 #define SWDIO_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14
