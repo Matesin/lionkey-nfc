@@ -10,7 +10,9 @@ project(lionkey_stm32h533 C ASM)
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
 # Create an executable object type
-add_executable(${PROJECT_NAME})
+add_executable(${PROJECT_NAME}
+		Inc/nfc_test.h
+		Inc/spi.h)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
@@ -104,7 +106,9 @@ target_link_libraries(hkdf PUBLIC hash hmac)
 # 		PUBLIC tinyaes micro_ecc tinymt32 sha256
 # )
 
-add_library(app_hw_crypto STATIC)
+add_library(app_hw_crypto STATIC
+		Src/nfc_test.c
+		Src/spi.c)
 target_sources(app_hw_crypto PUBLIC
 		Src/hw_crypto.c
 		Src/hw_crypto_curves.c
@@ -208,6 +212,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 		Src/app.c
 		Src/app_test.c
 		Src/flash_storage.c
+		Src/nfc.c
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE

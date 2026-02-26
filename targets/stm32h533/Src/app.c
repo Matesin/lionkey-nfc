@@ -2,6 +2,7 @@
 #include "usb.h"
 #include "main.h"
 #include "utils.h"
+#include "nfc.h"
 #include <stdbool.h>
 // #include "ctap_crypto_software.h"
 // #include "ctap_memory_storage.h"
@@ -309,6 +310,8 @@ noreturn void app_run(void) {
 	app_init();
 
 	usb_init();
+
+	nfc_init();
 
 	while (true) {
 
