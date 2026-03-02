@@ -6,8 +6,8 @@
 
 extern SPI_HandleTypeDef hspi2;
 
-static void spi_put_cs_low(void) { HAL_GPIO_WritePin(ST25_CS_GPIO_Port, ST25_CS_Pin, GPIO_PIN_RESET); }
-static void spi_put_cs_high(void) { HAL_GPIO_WritePin(ST25_CS_GPIO_Port, ST25_CS_Pin, GPIO_PIN_SET); }
+static void spi_put_cs_low(void) { HAL_GPIO_WritePin(ST25R_SS_PORT, ST25R_SS_PIN, GPIO_PIN_RESET); }
+static void spi_put_cs_high(void) { HAL_GPIO_WritePin(ST25R_SS_PORT, ST25R_SS_PIN, GPIO_PIN_SET); }
 
 uint8_t spi_read_reg(uint8_t addr)
 {

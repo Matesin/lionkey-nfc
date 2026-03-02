@@ -7,6 +7,7 @@
 #include "nfc_test.h"
 #include "spi.h"
 #include "utils.h"
+#include "rfal_nfca.h"
 
 extern SPI_HandleTypeDef hspi2;
 

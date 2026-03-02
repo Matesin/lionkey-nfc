@@ -34,6 +34,39 @@ target_compile_options(tinycbor PUBLIC
 		$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fno-freestanding>
 )
 
+# ST RFAL Library
+set(_RFAL_CANDIDATES
+		"${CMAKE_CURRENT_LIST_DIR}/../../lib/st25rfal"
+		"${CMAKE_CURRENT_LIST_DIR}/../../lib/ST25RFAL"
+		"${CMAKE_CURRENT_LIST_DIR}/../../lib/rfal"
+		"${CMAKE_CURRENT_LIST_DIR}/../../RFAL"
+)
+
+# If not set yet (being congigured for the first time) or refactored out, try to find the library in some common paths
+if(NOT DEFINED ST_RFAL_LIB_PATH OR ST_RFAL_LIB_PATH STREQUAL "" OR NOT EXISTS "${ST_RFAL_LIB_PATH}/source/rfal_nfc.c")
+	foreach(_p IN LISTS _RFAL_CANDIDATES)
+		if(EXISTS "${_p}/source/rfal_nfc.c")
+			set(ST_RFAL_LIB_PATH "${_p}")
+			break()
+		endif()
+	endforeach()
+endif()
+
+set (ST_RFAL_LIB_PATH ${ST_RFAL_LIB_PATH} CACHE PATH "Path to the ST25RFAL library")
+
+if (NOT EXISTS "${ST_RFAL_LIB_PATH}/source/rfal_nfc.c")
+	message(FATAL_ERROR
+			"\n"
+			"ST25RFAL library not found in ${ST_RFAL_LIB_PATH}\n"
+			"Please download the library from: \n"
+			"https://www.st.com/en/embedded-software/stsw-st25rfal002.html\n"
+			"And either: /n"
+			"	1) extract its contents to ${ST_RFAL_LIB_PATH}\n"
+			"	2) Configure with: -DST_RFAL_LIB_PATH=/absolute/path/to/st25rfal\n"
+	)
+endif ()
+# D25R16B platform configuration files for the RFAL library
+
 # add_library(tinyaes STATIC)
 # target_sources(tinyaes
 # 		PRIVATE
@@ -106,9 +139,7 @@ target_link_libraries(hkdf PUBLIC hash hmac)
 # 		PUBLIC tinyaes micro_ecc tinymt32 sha256
 # )
 
-add_library(app_hw_crypto STATIC
-		Src/nfc_test.c
-		Src/spi.c)
+add_library(app_hw_crypto STATIC)
 target_sources(app_hw_crypto PUBLIC
 		Src/hw_crypto.c
 		Src/hw_crypto_curves.c
@@ -202,8 +233,47 @@ target_compile_definitions(tinyusb INTERFACE
 )
 target_include_directories(tinyusb INTERFACE ${TINYUSB_SRC})
 
-target_link_directories(${PROJECT_NAME} PRIVATE
+# X-Cube NFC RFAL library for ST25R3916
+add_library(st25rfal STATIC)
+
+set(STEVAL_CONFIG_DIR ${CMAKE_CURRENT_LIST_DIR}/../../nfc/boards/steval-d25r16b/rfal)
+
+target_include_directories(st25rfal PUBLIC
+		${ST_RFAL_LIB_PATH}/include
+		${ST_RFAL_LIB_PATH}/source
+		${STEVAL_CONFIG_DIR}/Inc
+		${STEVAL_CONFIG_DIR}/conf/Inc
+		${ST_RFAL_LIB_PATH}/source/st25r3916
 )
+
+target_sources(st25rfal PRIVATE
+		# RFAL core
+		${ST_RFAL_LIB_PATH}/source/rfal_nfc.c
+		${ST_RFAL_LIB_PATH}/source/rfal_nfca.c
+		${ST_RFAL_LIB_PATH}/source/rfal_crc.c
+		${ST_RFAL_LIB_PATH}/source/rfal_analogConfig.c
+		${ST_RFAL_LIB_PATH}/source/rfal_cd.c
+		${ST_RFAL_LIB_PATH}/source/rfal_dlma.c
+		${ST_RFAL_LIB_PATH}/source/rfal_dpo.c
+		${ST_RFAL_LIB_PATH}/source/rfal_t4t.c
+		# st25r3916 specific
+		${ST_RFAL_LIB_PATH}/source/st25r3916/st25r3916.c
+		${ST_RFAL_LIB_PATH}/source/st25r3916/st25r3916_com.c
+		${ST_RFAL_LIB_PATH}/source/st25r3916/st25r3916_irq.c
+		${ST_RFAL_LIB_PATH}/source/st25r3916/st25r3916_aat.c
+		${ST_RFAL_LIB_PATH}/source/st25r3916/st25r3916_led.c
+		${ST_RFAL_LIB_PATH}/source/st25r3916/rfal_rfst25r3916.c
+		# platform config
+		${STEVAL_CONFIG_DIR}/Src/rfal_platform.c
+		${STEVAL_CONFIG_DIR}/Src/timer.c
+)
+
+target_link_libraries(st25rfal PUBLIC stm32cubemx)
+
+# global device definition macro
+target_compile_definitions(st25rfal PUBLIC ST25R3916B=1)
+
+target_link_directories(${PROJECT_NAME} PRIVATE)
 
 
 target_sources(${PROJECT_NAME} PRIVATE
@@ -213,6 +283,8 @@ target_sources(${PROJECT_NAME} PRIVATE
 		Src/app_test.c
 		Src/flash_storage.c
 		Src/nfc.c
+		Src/nfc_test.c
+		Src/spi.c
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -227,6 +299,7 @@ target_link_libraries(${PROJECT_NAME}
 		tinyusb
 		core
 		app_hw_crypto
+		st25rfal
 		# ctap_crypto_software
 )
 
