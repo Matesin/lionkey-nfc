@@ -11,11 +11,13 @@
 
 extern SPI_HandleTypeDef hspi2;
 
-void nfc_init(void) {
+void nfc_init(void)
+{
     debug_log("initializing NFC..." nl);
 
     // perform a simple SPI ping test to verify that we can read from the NFC chip
-    spi_ping_nfc_test();
-
+    run_nfc_tests();
     debug_log("NFC initialized" nl);
 }
+
+

@@ -268,10 +268,29 @@ target_sources(st25rfal PRIVATE
 		${STEVAL_CONFIG_DIR}/Src/timer.c
 )
 
-target_link_libraries(st25rfal PUBLIC stm32cubemx)
+target_link_libraries(st25rfal PUBLIC stm32cubemx core)
 
 # global device definition macro
 target_compile_definitions(st25rfal PUBLIC ST25R3916B=1)
+
+add_library(ndef STATIC
+		../../lib/ndef/Src/ndef_errno.c)
+
+target_include_directories(ndef PUBLIC
+		../../lib/ndef/Inc/message
+		../../lib/ndef/Inc
+)
+
+target_sources(ndef PRIVATE
+		../../lib/ndef/Src/message/ndef_message.c
+		../../lib/ndef/Src/message/ndef_record.c
+		../../lib/ndef/Src/message/ndef_type_deviceinfo.c
+		../../lib/ndef/Src/message/ndef_types.c
+		../../lib/ndef/Src/ndef_poller.c
+		../../lib/ndef/Src/ndef_t4t.c
+)
+
+target_link_libraries(ndef PUBLIC st25rfal stm32cubemx core)
 
 target_link_directories(${PROJECT_NAME} PRIVATE)
 
@@ -300,6 +319,7 @@ target_link_libraries(${PROJECT_NAME}
 		core
 		app_hw_crypto
 		st25rfal
+		ndef
 		# ctap_crypto_software
 )
 

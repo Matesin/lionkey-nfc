@@ -17,6 +17,8 @@
 #include "d25r16b_pinout.h"
 #include "nfc_conf.h"
 #include "timer.h"
+#include "utils.h"
+#include "spi.h"
 
 extern volatile uint32_t globalCommProtectCnt;
 
@@ -71,11 +73,11 @@ extern "C" {
 
 #define platformLedOff( port, pin )                   platformGpioClear(port, pin)                  /*!< Turns the given LED Off                     */
 #define platformLedOn( port, pin )                    platformGpioSet(port, pin)                    /*!< Turns the given LED On                      */
-#define platformLedToogle( port, pin )                platformGpioToogle(port, pin)                 /*!< Toogle the given LED                        */
+#define platformLedToggle( port, pin )                platformGpioToogle(port, pin)                 /*!< Toogle the given LED                        */
 
 #define platformGpioSet( port, pin )                  HAL_GPIO_WritePin(port, pin, GPIO_PIN_SET)    /*!< Turns the given GPIO High                   */
 #define platformGpioClear( port, pin )                HAL_GPIO_WritePin(port, pin, GPIO_PIN_RESET)  /*!< Turns the given GPIO Low                    */
-#define platformGpioToogle( port, pin )               HAL_GPIO_TogglePin(port, pin)                 /*!< Toogles the given GPIO                      */
+#define platformGpioToggle( port, pin )               HAL_GPIO_TogglePin(port, pin)                 /*!< Toggles the given GPIO                      */
 #define platformGpioIsHigh( port, pin )               (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_SET) /*!< Checks if the given LED is High             */
 #define platformGpioIsLow( port, pin )                (!platformGpioIsHigh(port, pin))              /*!< Checks if the given LED is Low              */
 
@@ -91,10 +93,9 @@ extern "C" {
 
 #define platformSpiSelect()                           platformGpioClear(ST25R_SS_PORT, ST25R_SS_PIN)/*!< SPI SS\CS: Chip|Slave Select                */
 #define platformSpiDeselect()                         platformGpioSet(ST25R_SS_PORT, ST25R_SS_PIN)  /*!< SPI SS\CS: Chip|Slave Deselect              */
-#define platformSpiTxRx( txBuf, rxBuf, len )          HAL_SPI_TransmitReceive(&hspi2, txBuf, rxBuf, len, 100) /*!< SPI Transmit and Receive                   */
+#define platformSpiTxRx( txBuf, rxBuf, len )          NFC_SPI_SendRcv(txBuf, rxBuf, len)            /*!< SPI Transmit and receive data               */
 
-
-#define platformLog(...)                              logUsart(__VA_ARGS__)                         /*!< Log  method                                 */
+#define platformLog(...)                              debug_log(__VA_ARGS__)                         /*!< Log  method                                 */
 
 /* Exported functions ------------------------------------------------------- */
 

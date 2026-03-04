@@ -4,10 +4,40 @@
 #include "spi.h"
 #include "main.h"
 
-extern SPI_HandleTypeDef hspi2;
-
 static void spi_put_cs_low(void) { HAL_GPIO_WritePin(ST25R_SS_PORT, ST25R_SS_PIN, GPIO_PIN_RESET); }
 static void spi_put_cs_high(void) { HAL_GPIO_WritePin(ST25R_SS_PORT, ST25R_SS_PIN, GPIO_PIN_SET); }
+
+int32_t NFC_SPI_SendRcv (uint8_t *pTxData, uint8_t *pRxData, size_t len)
+{
+    HAL_StatusTypeDef status = HAL_ERROR;
+    int32_t ret = BSP_ERROR_NONE;
+
+    if((pTxData != NULL) && (pRxData != NULL))
+    {
+        status = HAL_SPI_TransmitReceive(&COMM_HANDLE, (uint8_t *)pTxData, (uint8_t *)pRxData, len, 2000);
+    }
+    else if ((pTxData != NULL) && (pRxData == NULL))
+    {
+        status = HAL_SPI_Transmit(&COMM_HANDLE, (uint8_t *)pTxData, len, 2000);
+    }
+    else if ((pTxData == NULL) && (pRxData != NULL))
+    {
+        status = HAL_SPI_Receive(&COMM_HANDLE, (uint8_t *)pRxData, len, 2000);
+    }
+    else
+    {
+        ret = BSP_ERROR_WRONG_PARAM;
+    }
+
+    /* Check the communication status */
+    if (status != HAL_OK)
+    {
+        /* Execute user timeout callback */
+        ret = BSP_ERROR_BUS_FAILURE;
+    }
+
+    return ret;
+}
 
 uint8_t spi_read_reg(uint8_t addr)
 {
