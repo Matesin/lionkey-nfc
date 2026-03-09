@@ -22,6 +22,7 @@
 #include "stm32h5xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "st25r3916_irq.h"
 #include "tusb.h"
 /* USER CODE END Includes */
 
@@ -249,6 +250,17 @@ void SPI2_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+
+void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == ST25R_INT_PIN)
+    {
+        debug_log("interrupt"nl);
+        st25r3916Isr();
+    }
+}
+
+
 
 void USB_DRD_FS_IRQHandler(void) {
 	tud_int_handler(0);

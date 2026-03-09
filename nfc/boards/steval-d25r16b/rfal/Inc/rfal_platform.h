@@ -41,23 +41,22 @@ extern "C" {
  */
 
 /* Exported types ------------------------------------------------------------*/
-
 /* Exported macro ------------------------------------------------------------*/
 
 
 /** @defgroup PTD_Platform_Exported_Macro
  *  @{
  */
-#define platformProtectST25RComm()                do{ globalCommProtectCnt++;                  \
-                                                          __DSB();NVIC_DisableIRQ(IRQ_ST25R_EXTI_IRQn); \
-                                                          __DSB();                             \
-                                                          __ISB();                             \
+#define platformProtectST25RComm()                do{ globalCommProtectCnt++;                   \
+                                                          __DSB();                              \
+                                                          NVIC_DisableIRQ(IRQ_ST25R_EXTI_IRQn); \
+                                                          __DSB();                              \
+                                                          __ISB();                              \
                                                         }while(0)                                   /*!< Protect unique access to ST25R communication channel - IRQ disable on single thread environment (MCU) ; Mutex lock on a multi thread environment      */
-#define platformUnprotectST25RComm()              do{ globalCommProtectCnt--;             \
-                                                          if (globalCommProtectCnt == 0U) \
-                                                          {                               \
-                                                            NVIC_EnableIRQ(IRQ_ST25R_EXTI_IRQn);   \
-                                                          }                               \
+#define platformUnprotectST25RComm()              do{if (--globalCommProtectCnt == 0U)            \
+                                                          {                                       \
+                                                            NVIC_EnableIRQ(IRQ_ST25R_EXTI_IRQn);  \
+                                                          }                                       \
                                                         }while(0)                                   /*!< Unprotect unique access to ST25R communication channel - IRQ enable on a single thread environment (MCU) ; Mutex unlock on a multi thread environment */
 
 #define platformProtectST25RIrqStatus()           platformProtectST25RComm()                /*!< Protect unique access to IRQ status var - IRQ disable on single thread environment (MCU) ; Mutex lock on a multi thread environment */
@@ -68,6 +67,9 @@ extern "C" {
 
 #define platformIrqST25RSetCallback( cb )
 #define platformIrqST25RPinInitialize()
+
+#define platformIrqST25R3916Enable()   HAL_NVIC_EnableIRQ(ST25R_EXTI_IRQn)
+#define platformIrqST25R3916Disable()  HAL_NVIC_DisableIRQ(ST25R_EXTI_IRQn)
 
 #define platformLedsInitialize()                                                                    /*!< Initializes the pins used as LEDs to outputs*/
 
@@ -96,7 +98,6 @@ extern "C" {
 #define platformSpiTxRx( txBuf, rxBuf, len )          NFC_SPI_SendRcv(txBuf, rxBuf, len)            /*!< SPI Transmit and receive data               */
 
 #define platformLog(...)                              debug_log(__VA_ARGS__)                         /*!< Log  method                                 */
-
 /* Exported functions ------------------------------------------------------- */
 
 /**

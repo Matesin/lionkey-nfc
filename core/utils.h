@@ -82,6 +82,7 @@
 
 #if LIONKEY_DEBUG_LEVEL > 2
 	void dump_hex(const uint8_t *buf, size_t size);
+	char* hex2Str(unsigned char * data, size_t dataLen);
 #else
 	#define dump_hex(buf, size) ((void) 0)
 #endif
