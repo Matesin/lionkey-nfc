@@ -249,6 +249,7 @@ target_sources(st25rfal PRIVATE
 		${ST_RFAL_LIB_PATH}/source/rfal_nfc.c
 		${ST_RFAL_LIB_PATH}/source/rfal_nfca.c
 		${ST_RFAL_LIB_PATH}/source/rfal_nfcDep.c
+		${ST_RFAL_LIB_PATH}/source/rfal_isoDep.c
 		${ST_RFAL_LIB_PATH}/source/rfal_crc.c
 		${ST_RFAL_LIB_PATH}/source/rfal_analogConfig.c
 		${ST_RFAL_LIB_PATH}/source/rfal_cd.c
