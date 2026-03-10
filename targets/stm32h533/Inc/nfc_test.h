@@ -16,4 +16,5 @@ bool nfc_init_test(void);
 void spi_loopback_test(void);
 void spi_ping_nfc_test(void);
 void nfc_test_worker(void);
+void demoTask(void);
 #endif //LIONKEY_NFC_TEST_H

@@ -15,75 +15,11 @@
 #include "rfal_platform.h"
 #include "rfal_utils.h"
 
-static rfalNfcDiscoverParam discParam;
-static bool                 multiSel;
-static void demoNotif( rfalNfcState st );
-static bool demoInit(void);
 static void demoCE( void );
 ReturnCode  demoTransceiveBlocking( uint8_t *txBuf, uint16_t txBufSize, uint8_t **rxData, uint16_t **rcvLen, uint32_t fwt );
-static void demoTask(void);
 
 uint8_t state;
 
-static uint8_t ceNFCF_nfcid2[]     = {0x02, 0xFE, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
-#if RFAL_FEATURE_NFC_DEP
-static uint8_t ceNFCF_SC[]         = {0x12, 0xFC};
-static uint8_t ceNFCF_SENSF_RES[]  = {0x01,                                                       /* SENSF_RES                                */
-                                      0x02, 0xFE, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,             /* NFCID2                                   */
-                                      0x00, 0x00, 0x00, 0x00, 0x00, 0x7F, 0x7F, 0x00,             /* PAD0, PAD01, MRTIcheck, MRTIupdate, PAD2 */
-                                      0x00, 0x00 };
-#endif
-
-static uint8_t NFCID3[] = {0x01, 0xFE, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A};
-static uint8_t GB[] = {0x46, 0x66, 0x6d, 0x01, 0x01, 0x11, 0x02, 0x02, 0x07, 0x80, 0x03, 0x02, 0x00, 0x03, 0x04, 0x01, 0x32, 0x07, 0x01, 0x03};
-
-/* NFC-A CE config */
-/* 4-byte UIDs with first byte 0x08 would need random number for the subsequent 3 bytes.
- * 4-byte UIDs with first byte 0x*F are Fixed number, not unique, use for this demo
- * 7-byte UIDs need a manufacturer ID and need to assure uniqueness of the rest.*/
-static uint8_t ceNFCA_NFCID[]     = {0x5F, 'S', 'T', 'M'};    /* =_STM, 5F 53 54 4D NFCID1 / UID (4 bytes) */
-static uint8_t ceNFCA_SENS_RES[]  = {0x02, 0x00};             /* SENS_RES / ATQA for 4-byte UID            */
-static uint8_t ceNFCA_SEL_RES     = 0x20;                     /* SEL_RES / SAK */
-
-static void demoNotif( rfalNfcState st )
-{
-    uint8_t       devCnt;
-    rfalNfcDevice *dev;
-
-    if( st == RFAL_NFC_STATE_WAKEUP_MODE )
-    {
-        platformLog("Wake Up mode started \r\n");
-    }
-    else if( st == RFAL_NFC_STATE_POLL_TECHDETECT )
-    {
-        if( discParam.wakeupEnabled )
-        {
-            platformLog("Wake Up mode terminated. Polling for devices \r\n");
-        }
-    }
-    else if( st == RFAL_NFC_STATE_POLL_SELECT )
-    {
-        /* Check if in case of multiple devices, selection is already attempted */
-        if( (!multiSel) )
-        {
-            multiSel = true;
-            /* Multiple devices were found, activate first of them */
-            rfalNfcGetDevicesFound( &dev, &devCnt );
-            rfalNfcSelect( 0 );
-
-            platformLog("Multiple Tags detected: %d \r\n", devCnt);
-        }
-        else
-        {
-            rfalNfcDeactivate( RFAL_NFC_DEACTIVATE_DISCOVERY );
-        }
-    }
-    else if( st == RFAL_NFC_STATE_START_DISCOVERY )
-    {
-        /* Clear mutiple device selection flag */
-        multiSel = false;
-    }
-}
 
 void run_nfc_tests(void) {
     debug_log("running NFC tests..." nl);
@@ -115,16 +51,14 @@ void spi_ping_nfc_test(void) {
 
 void nfc_test_worker(void)
 {
-    debug_log("Initialising NFC" nl);
-    demoInit();
-    debug_log("NFC initialised" nl);
+    state = DEMO_ST_DISCOVERY;
     while (1)
     {
         demoTask();
     }
 }
 
-static void demoTask(void)
+void demoTask(void)
 {
     static rfalNfcDevice *nfcDevice;
 
@@ -133,7 +67,6 @@ static void demoTask(void)
     switch( state )
     {
         case DEMO_ST_START_DISCOVERY:
-          multiSel = false;
           state    = DEMO_ST_DISCOVERY;
           break;
 
@@ -141,7 +74,6 @@ static void demoTask(void)
 
             if( rfalNfcIsDevActivated( rfalNfcGetState() ) )
             {
-                debug_log("activated"nl);
                 rfalNfcGetActiveDevice( &nfcDevice );
                 demoCE( );
                 rfalNfcDeactivate( RFAL_NFC_DEACTIVATE_DISCOVERY );
@@ -154,69 +86,6 @@ static void demoTask(void)
         default:
             break;
     }
-}
-
-static bool demoInit(void)
-{
-    ReturnCode err = rfalNfcInitialize();
-    if( err == RFAL_ERR_NONE )
-    {
-        rfalNfcDefaultDiscParams( &discParam );
-        
-        discParam.devLimit      = 1U;
-        
-        memcpy( &discParam.nfcid3, NFCID3, sizeof(NFCID3) );
-        memcpy( &discParam.GB, GB, sizeof(GB) );
-        discParam.GBLen         = sizeof(GB);
-        discParam.p2pNfcaPrio   = true;
-
-        discParam.notifyCb             = demoNotif;
-        discParam.totalDuration        = 1000U;
-        discParam.techs2Find           = RFAL_NFC_TECH_NONE;          /* For the demo, enable the NFC Technologies based on RFAL Feature switches */
-
-
-#if RFAL_FEATURE_NFCA
-        discParam.techs2Find          |= RFAL_NFC_POLL_TECH_A;
-#endif /* RFAL_FEATURE_NFCA */
-
-#if DEMO_CARD_EMULATION_ONLY
-        discParam.totalDuration        = 60000U;              /* 60 seconds */
-        discParam.techs2Find           = RFAL_NFC_TECH_NONE;  /* Overwrite any previous poller modes */
-#endif /* DEMO_CARD_EMULATION_ONLY */
-
-#if RFAL_SUPPORT_CE && RFAL_FEATURE_LISTEN_MODE
-        demoCeInit( ceNFCF_nfcid2 );
-    
-#if RFAL_SUPPORT_MODE_LISTEN_NFCA && RFAL_FEATURE_NFCA
-        /* Set configuration for NFC-A CE */
-        memcpy( discParam.lmConfigPA.SENS_RES, ceNFCA_SENS_RES, RFAL_LM_SENS_RES_LEN );     /* Set SENS_RES / ATQA */
-        memcpy( discParam.lmConfigPA.nfcid, ceNFCA_NFCID, RFAL_LM_NFCID_LEN_04 );           /* Set NFCID / UID */
-        discParam.lmConfigPA.nfcidLen = RFAL_LM_NFCID_LEN_04;                                  /* Set NFCID length to 7 bytes */
-        discParam.lmConfigPA.SEL_RES  = ceNFCA_SEL_RES;                                        /* Set SEL_RES / SAK */
-
-        discParam.techs2Find |= RFAL_NFC_LISTEN_TECH_A;
-#endif /* RFAL_SUPPORT_MODE_LISTEN_NFCA */
-
-#if RFAL_SUPPORT_MODE_LISTEN_NFCF && RFAL_FEATURE_NFCF
-        /* Set configuration for NFC-F CE */
-        memcpy( discParam.lmConfigPF.SC, ceNFCF_SC, RFAL_LM_SENSF_SC_LEN );                 /* Set System Code */
-        memcpy( &ceNFCF_SENSF_RES[RFAL_NFCF_CMD_LEN], ceNFCF_nfcid2, RFAL_NFCID2_LEN );     /* Load NFCID2 on SENSF_RES */
-        memcpy( discParam.lmConfigPF.SENSF_RES, ceNFCF_SENSF_RES, RFAL_LM_SENSF_RES_LEN );  /* Set SENSF_RES / Poll Response */
-
-        discParam.techs2Find |= RFAL_NFC_LISTEN_TECH_F;
-#endif /* RFAL_SUPPORT_MODE_LISTEN_NFCF */
-#endif /* RFAL_SUPPORT_CE && RFAL_FEATURE_LISTEN_MODE */
-
-        err = rfalNfcDiscover( &discParam );
-        if( err != RFAL_ERR_NONE )
-        {
-            return false;
-        }
-        
-        state = DEMO_ST_START_DISCOVERY;
-        return true;
-    }
-    return false;
 }
 
 static void demoCE( void )
@@ -236,7 +105,7 @@ static void demoCE( void )
         switch( rfalNfcGetState() )
         {
         case RFAL_NFC_STATE_ACTIVATED:
-            err = demoTransceiveBlocking( NULL, 0, &rxData, &rcvLen, 0);
+            err = demoTransceiveBlocking( NULL, 0, &rxData, &rcvLen, RFAL_FWT_NONE);
             break;
 
         case RFAL_NFC_STATE_DATAEXCHANGE:
@@ -250,9 +119,12 @@ static void demoCE( void )
             return;
 
         case RFAL_NFC_STATE_LISTEN_SLEEP:
+            err = demoTransceiveBlocking( NULL, 0, &rxData, &rcvLen, RFAL_FWT_NONE );
+            break;
         default:
             break;
         }
+        // errorToString(err);
     }
     while( (err == RFAL_ERR_NONE) || (err == RFAL_ERR_SLEEP_REQ) );
 
