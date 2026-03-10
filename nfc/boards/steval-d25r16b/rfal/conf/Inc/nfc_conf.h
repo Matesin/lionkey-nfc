@@ -38,6 +38,9 @@ extern "C" {
 
 #define NFC_SPI_TIMEOUT                         100U
 
+#define RFAL_FEATURE_ISO_DEP_APDU_MAX_LEN      512U       /*!< ISO-DEP APDU max length. Please use multiples of I-Block max length       */
+#define RFAL_FEATURE_NFC_DEP_PDU_MAX_LEN       512U       /*!< NFC-DEP PDU max length.                                                   */
+
 /* External peripheral handles (declare defined elsewhere in the project) */
 extern SPI_HandleTypeDef hspi2;
 
@@ -48,8 +51,10 @@ extern SPI_HandleTypeDef hspi2;
 #define RFAL_FEATURE_NFCF   false
 #define RFAL_FEATURE_NFCV   false
 #define RFAL_FEATURE_ST25TB false
+
 #define RFAL_FEATURE_NFC_DEP false
 
+#define RFAL_FEATURE_LISTEN_MODE true
 
 /* Tag type support */
 #define RFAL_FEATURE_T1T false

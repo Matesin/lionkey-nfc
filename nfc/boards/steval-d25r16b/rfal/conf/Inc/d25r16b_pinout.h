@@ -31,11 +31,11 @@ extern "C" {
 
 
 #include "stm32h5xx_hal.h"
-
 /* ST25R3916 pinout configuration for STEVAL-D25R16B board */
 
 #define ST25R_SS_PORT       GPIOB
 #define ST25R_SS_PIN        GPIO_PIN_1
+
 #define IRQ_ST25R_EXTI_IRQn EXTI0_IRQn
 #define ST25R_INT_PORT      GPIOB
 #define ST25R_INT_PIN       GPIO_PIN_0

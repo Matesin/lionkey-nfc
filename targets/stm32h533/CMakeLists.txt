@@ -10,9 +10,7 @@ project(lionkey_stm32h533 C ASM)
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
 # Create an executable object type
-add_executable(${PROJECT_NAME}
-		Inc/nfc_test.h
-		Inc/spi.h)
+add_executable(${PROJECT_NAME})
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
@@ -250,6 +248,7 @@ target_sources(st25rfal PRIVATE
 		# RFAL core
 		${ST_RFAL_LIB_PATH}/source/rfal_nfc.c
 		${ST_RFAL_LIB_PATH}/source/rfal_nfca.c
+		${ST_RFAL_LIB_PATH}/source/rfal_nfcDep.c
 		${ST_RFAL_LIB_PATH}/source/rfal_crc.c
 		${ST_RFAL_LIB_PATH}/source/rfal_analogConfig.c
 		${ST_RFAL_LIB_PATH}/source/rfal_cd.c
@@ -271,7 +270,7 @@ target_sources(st25rfal PRIVATE
 target_link_libraries(st25rfal PUBLIC stm32cubemx core)
 
 # global device definition macro
-target_compile_definitions(st25rfal PUBLIC ST25R3916B=1)
+target_compile_definitions(st25rfal PUBLIC ST25R3916B=1 RFAL_TEST_MODE=1)
 
 add_library(ndef STATIC
 		../../lib/ndef/Src/ndef_errno.c)
@@ -304,6 +303,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 		Src/nfc.c
 		Src/nfc_test.c
 		Src/spi.c
+		Src/demo_ce.c
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE

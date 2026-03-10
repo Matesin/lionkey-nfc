@@ -6,10 +6,14 @@
 #define LIONKEY_NFC_TEST_H
 #include <stdbool.h>
 
+#define DEMO_ST_NOTINIT               0    /*!< Demo State:  Not initialized */
+#define DEMO_ST_START_DISCOVERY       1    /*!< Demo State:  Start Discovery */
+#define DEMO_ST_DISCOVERY             2    /*!< Demo State:  Discovery       */
+
 void run_nfc_tests(void);
 
 bool nfc_init_test(void);
 void spi_loopback_test(void);
 void spi_ping_nfc_test(void);
-
+void nfc_test_worker(void);
 #endif //LIONKEY_NFC_TEST_H

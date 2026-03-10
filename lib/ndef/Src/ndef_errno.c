@@ -9,7 +9,7 @@
 void errorToString(int errorCode)
 {
     if (errorCode == ERR_NONE) {
-        debug_log("No error\n");
+        debug_log("No error" nl);
         return;
     }
 
@@ -17,7 +17,7 @@ void errorToString(int errorCode)
     debug_log(red("%s") nl, rfalErrorToStr(errorCode));
 }
 
-static const char* rfalErrorToStr(const int code)
+const char* rfalErrorToStr(const int code)
 {
     {
     /* Table indexed by numeric error code.
