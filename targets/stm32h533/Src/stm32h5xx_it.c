@@ -255,7 +255,6 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
 {
     if (GPIO_Pin == ST25R_INT_PIN)
     {
-        debug_log("interrupt"nl);
         st25r3916Isr();
     }
 }
