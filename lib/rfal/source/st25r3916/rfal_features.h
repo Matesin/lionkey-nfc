@@ -46,7 +46,7 @@
 ******************************************************************************
 */
 
-#define RFAL_SUPPORT_MODE_POLL_NFCA                true          /*!< RFAL Poll NFCA mode support switch    */
+#define RFAL_SUPPORT_MODE_POLL_NFCA                false          /*!< RFAL Poll NFCA mode support switch    */
 #define RFAL_SUPPORT_MODE_POLL_NFCB                false          /*!< RFAL Poll NFCB mode support switch    */
 #define RFAL_SUPPORT_MODE_POLL_NFCF                false          /*!< RFAL Poll NFCF mode support switch    */
 #define RFAL_SUPPORT_MODE_POLL_NFCV                false          /*!< RFAL Poll NFCV mode support switch    */
