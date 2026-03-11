@@ -430,8 +430,8 @@ void rfalNfcWorker( void )
         case RFAL_NFC_STATE_POLL_TECHDETECT:
         
             err = rfalNfcPollTechDetection();                                       /* Perform Technology Detection                         */
-            errorToString(err);
-        if( err != RFAL_ERR_BUSY )                                                /* Wait until all technologies are performed            */
+
+            if(err != RFAL_ERR_BUSY )                                                /* Wait until all technologies are performed            */
             {
                 if( ( err != RFAL_ERR_NONE) || (gNfcDev.techsFound == RFAL_NFC_TECH_NONE) )/* Check if any error occurred or no techs were found   */
                 {

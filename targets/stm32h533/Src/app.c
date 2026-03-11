@@ -9,6 +9,8 @@
 #include "flash_storage.h"
 #include "hw_crypto.h"
 #include "app_test.h"
+#include "nfc.h"
+#include "nfc_test.h"
 
 // static uint8_t memory[16 * 1024];
 // static ctap_memory_storage_context_t app_storage_ctx = {
@@ -320,6 +322,8 @@ noreturn void app_run(void) {
 		app_debug_task();
 
 		app_ctaphid_task();
+
+		// demoTask();
 
 	}
 

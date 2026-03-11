@@ -75,6 +75,7 @@ void demoTask(void)
             if( rfalNfcIsDevActivated( rfalNfcGetState() ) )
             {
                 rfalNfcGetActiveDevice( &nfcDevice );
+                demoCeInit(nfcDevice->nfcid);
                 demoCE( );
                 rfalNfcDeactivate( RFAL_NFC_DEACTIVATE_DISCOVERY );
                 state = DEMO_ST_START_DISCOVERY;

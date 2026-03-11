@@ -27,17 +27,9 @@ extern "C" {
 }
 #endif
 
-/** @addtogroup X-CUBE-NFC6_Applications
- *  @{
- */
 
 /** @addtogroup PollingTagDetect
  *  @{
- */
-
-/** @defgroup PTD_Platform
- *  @brief Demo functions containing the example code
- * @{
  */
 
 /* Exported types ------------------------------------------------------------*/
@@ -108,7 +100,7 @@ extern "C" {
 #define RFAL_FEATURE_NFC_RF_BUF_LEN            258U
 
 #define RFAL_FEATURE_ISO_DEP_APDU_MAX_LEN      512U       /*!< ISO-DEP APDU max length. Please use multiples of I-Block max length       */
-#define RFAL_FEATURE_NFC_DEP_PDU_MAX_LEN       512U       /*!< NFC-DEP PDU max length.                                                   */
+// #define RFAL_FEATURE_NFC_DEP_PDU_MAX_LEN       512U       /*!< NFC-DEP PDU max length.                                                   */
 
 /* NFC technology feature switches */
 /*! Only allow NFC-A because it fits our use case */
