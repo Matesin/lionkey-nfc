@@ -147,7 +147,8 @@ target_link_libraries(app_hw_crypto
 		PUBLIC hash stm32cubemx
 )
 
-add_library(core STATIC)
+add_library(core STATIC
+		../../core/ctap_nfc.c)
 target_sources(core PUBLIC
 		../../core/ctap.c
 		../../core/ctap_asn1.c
