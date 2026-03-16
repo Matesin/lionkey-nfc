@@ -3,7 +3,11 @@
 //
 
 #include "nfc.h"
+
+#include "ctap_nfc.h"
+#include "demo_ce.h"
 #include "main.h"
+#include "ndef_errno.h"
 #include "nfc_test.h"
 #include "rfal_nfc.h"
 #include "spi.h"
@@ -18,12 +22,42 @@ static uint8_t NFCID[]     = {0x5F, 'L', 'N', 'K'};    /* =_LNK, 5F  4C  4E  4B 
 static uint8_t SENS_RES[]  = {0x44, 0x00};             /* SENS_RES / ATQA for 4-byte UID            */
 static uint8_t SEL_RES     = 0x20U;                     /* SEL_RES / SAK */
 
+/**
+  * Ver : Indicates the NDEF mapping version <BR>
+  * Nbr : Indicates the number of blocks that can be read <BR>
+  * Nbw : Indicates the number of blocks that can be written <BR>
+  * NmaxB : Indicates the maximum number of blocks available for NDEF data <BR>
+  * WriteFlag : Indicates whether a previous NDEF write procedure has finished or not <BR>
+  * RWFlag : Indicates data can be updated or not <BR>
+  * Ln : Is the size of the actual stored NDEF data in bytes <BR>
+  * Checksum : allows the Reader/Writer to check whether the Attribute Data are correct <BR>
+  */
+static uint8_t InformationBlock[] = { 0x10,                                             /* Ver        */
+                                      0x08,                                             /* Nbr        */
+                                      0x08,                                             /* Nbw        */
+                                      0x00, 0x0F,                                       /* NmaxB      */
+                                      0x00, 0x00, 0x00, 0x00,                           /* RFU        */
+                                      0x00,                                             /* WriteFlag  */
+                                      0x01,                                             /* RWFlag     */
+                                      0x00, 0x00, 0x15,                                 /* Ln         */
+                                      0x00, 0x45                                        /* Checksum   */
+                                      };
+
+
+static uint8_t        ndefFile[NDEF_SIZE];  /*!< Buffer to store NDEF File                 */
 static rfalNfcDiscoverParam discParam;
 
-uint8_t select_state;
+rfalNfcState prev_state = -1;
 
-static bool cmdCompare(uint8_t *cmd, uint8_t *find, uint16_t len);
-static inline bool nfc_init_params(void);
+uint8_t select_state = NFC_DISCOVERY;
+int8_t selected_index = -1;
+t4t_context_t ce_ctx;
+
+
+static bool nfc_init_params(void);
+static void nfc_notify(rfalNfcState st);
+static void init_context(t4t_context_t *ctx);
+static void nfc_ce_task(void);
 
 void nfc_init(void)
 {
@@ -32,9 +66,10 @@ void nfc_init(void)
         debug_log(red("Failed to initialize NFC") nl);
         return;
     }
+    demoCeInit(NULL);
+    init_context(&ce_ctx);
+    // run_nfc_tests();
     debug_log("NFC initialized" nl);
-    debug_log("Running NFC tests..." nl);
-    run_nfc_tests();
 }
 
 static bool nfc_init_params(void)
@@ -47,7 +82,7 @@ static bool nfc_init_params(void)
         discParam.devLimit      = 1U;
 
         discParam.notifyCb             = nfc_notify;
-        discParam.totalDuration        = 1000U;
+        discParam.totalDuration        = 60000U;
 
         /* Set configuration for NFC-A CE */
         memcpy( discParam.lmConfigPA.SENS_RES, SENS_RES, RFAL_LM_SENS_RES_LEN );     /* Set SENS_RES / ATQA */
@@ -67,113 +102,163 @@ static bool nfc_init_params(void)
     return false;
 }
 
-void nfc_task(void)
-{
 
-}
 
-static bool cmdCompare(uint8_t *cmd, uint8_t *find, uint16_t len)
+uint16_t nfc_parse_and_respond(uint8_t *rxData, uint16_t rxDataLen, uint8_t *txBuf, uint16_t txBufLen )
 {
-    for(int i = 0; i < 20; i++)
-    {
-        if(!memcmp(&cmd[i],find, len))
-        {
-            return true;
-        }
+    nfc_apdu_t apdu;
+    apdu_parse_status_t err;
+
+    if (txBuf == NULL || txBufLen < 2) {
+        platformErrorHandle();
+        return 0;
     }
-    return false;
-}
-//
-// uint16_t nfc_parse_and_respond(uint8_t *rxData, uint16_t rxDataLen, uint8_t *txBuf, uint16_t txBufLen )
-// {
-//     {
-//         if( (txBuf == NULL) || (txBufLen < 2) )
-//         {
-//             platformErrorHandle();  /* Must ensure appropriate buffer */
-//             return 0;
-//         }
-//
-//
-//         if( (rxData != NULL) && (rxDataLen >= 4) )
-//         {
-//             if(rxData[0] == T4T_CLA_00)
-//             {
-//                 switch(rxData[1])
-//                 {
-//                 case T4T_INS_SELECT:
-//                     return demoCeT4TSelect(rxData, txBuf);
-//
-//                 case T4T_INS_READ:
-//                     return demoCeT4TRead(rxData, txBuf, txBufLen);
-//
-//                 case T4T_INS_UPDATE:
-//                     return demoCeT4TUpdate(rxData, txBuf);
-//
-//                 default:
-//                     break;
-//                 }
-//             }
-//         }
-//
-//         /* Function not supported ...  */
-//         txBuf[0] = ((char)0x68);
-//         txBuf[1] = ((char)0x00);
-//         return 2;
-//     }
-// }
-//
-// uint16_t nfc_select_response(uint8_t *cmdData, uint8_t *rspData )
-// {
-//     {
-//         bool success = false;
-//         /*
-//          * Cmd: CLA(1) | INS(1) | P1(1) | P2(1) | Lc(1) | Data(n) | [Le(1)]
-//          * Rsp: [FCI(n)] | SW12
-//          *
-//          * Select App by Name NDEF:       00 A4 04 00 07 D2 76 00 00 85 01 01 00
-//          * Select App by Name NDEF 4 ST:  00 A4 04 00 07 A0 00 00 00 03 00 00 00
-//          * Select CC FID:                 00 A4 00 0C 02 xx xx
-//          * Select NDEF FID:               00 A4 00 0C 02 xx xx
-//          */
-//
-//         uint8_t aid[] = {0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01};
-//         uint8_t fidCC[] = {FID_CC >> 8 , FID_CC & 0xFF};
-//         uint8_t fidNDEF[] = {FID_NDEF >> 8, FID_NDEF & 0xFF};
-//         uint8_t selectFileId[] = {0xA4, 0x00, 0x0C, 0x02, 0x00, 0x01 };
-//
-//
-//         if(cmdCompare( cmdData, aid, sizeof(aid)))
-//         { /* Select Appli */
-//             select_state = STATE_APP_SELECTED;
-//             success = true;
-//         }
-//         else if((select_state >= STATE_APP_SELECTED) && cmdCompare(cmdData, fidCC, sizeof(fidCC)))
-//         { /* Select CC */
-//             select_state = STATE_CC_SELECTED;
-//             nSelectedIdx = 0;
-//             success = true;
-//         }
-//         else if((select_state >= STATE_APP_SELECTED) && (cmdCompare(cmdData,fidNDEF,sizeof(fidNDEF)) || cmdCompare(cmdData,selectFileId,sizeof(selectFileId))))
-//         { /* Select NDEF */
-//             select_state = STATE_FID_SELECTED;
-//             nSelectedIdx = 1;
-//             success = true;
-//         }
-//         else
-//         {
-//             select_state = STATE_IDLE;
-//         }
-//
-//         rspData[0] = (success ? (char)0x90 : 0x6A);
-//         rspData[1] = (success ? (char)0x00 : 0x82);
-//
-//         return 2;
-//     }
-// }
 
-void nfc_notify(rfalNfcState st)
+    err = nfc_parse_apdu(rxData, rxDataLen, &apdu);
+
+    if (err != APDU_PARSE_OK) {
+        return nfc_put_sw(txBuf, NFC_SW_COND_NOT_SATISFIED);
+    }
+
+    switch(rxData[1])
+    {
+    case T4T_INS_SELECT:
+        return nfc_handle_select(&ce_ctx, &apdu, rxData);
+
+    case T4T_INS_READ:
+        return nfc_handle_read(&ce_ctx, &apdu, txBuf, txBufLen);
+
+    case T4T_INS_UPDATE:
+        return nfc_handle_update(&ce_ctx, &apdu, rxData);
+
+    default:
+        /* MISRA 16.4: No empty case allowed */
+        break;
+    }
+    return nfc_put_sw(txBuf, NFC_SW_CLA_NOT_SUPPORTED);
+}
+
+static void nfc_notify(rfalNfcState st)
 {
-    // debug_log("NFC state changed: %d" nl, st);
+    // don't log state unless it has changed
+    if (prev_state == st) {
+        return;
+    }
+    switch(st)
+    {
+        case RFAL_NFC_STATE_IDLE:
+            debug_log("NFC: idle" nl);
+            break;
+        case RFAL_NFC_STATE_ACTIVATED:
+            debug_log("NFC: device activated (CE mode)" nl);
+            break;
+        case RFAL_NFC_STATE_LISTEN_COLAVOIDANCE:
+            debug_log("NFC: collision avoidance" nl);
+            break;
+        default:
+            /* MISRA 16.4: No empty default case allowed */
+            break;
+    }
+    prev_state = st;
 }
 
+void app_nfc_task(void)
+{
+    #if NFC_DEMO_CE
+        demoTask();
+    #else
+
+        rfalNfcWorker();
+        switch (select_state)
+        {
+        case NFC_START_DISCOVERY:
+            select_state = NFC_DISCOVERY;
+            break;
+        case NFC_DISCOVERY:
+            if (rfalNfcIsDevActivated(rfalNfcGetState()))
+            {
+                select_state = NFC_CE_ACTIVE;
+            }
+            break;
+        case NFC_CE_ACTIVE:
+            nfc_ce_task();
+            break;
+        case NFC_NOTINIT:
+        default:
+            /* MISRA 16.4: No empty case allowed */
+            break;
+        }
+
+    // if ((select_state == NFC_CE_ACTIVE) && (rfalNfcDataExchangeGetStatus() != RFAL_ERR_BUSY))
+    // {
+    //     rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
+    //     debug_log(red("NFC: session ended") nl);
+    //     select_state = NFC_START_DISCOVERY;
+    // }
+#endif
+}
+
+static void nfc_ce_task(void)
+{
+    static uint8_t  *rx_data  = NULL;
+    static uint16_t *rcv_len  = NULL;
+    static uint8_t   nfc_resp_buf[512];
+
+    switch (rfalNfcGetState())
+    {
+    case RFAL_NFC_STATE_ACTIVATED:
+        rfalNfcDataExchangeStart(NULL, 0, &rx_data, &rcv_len, RFAL_FWT_NONE);
+        break;
+    case RFAL_NFC_STATE_DATAEXCHANGE_DONE:
+        {
+            uint16_t tx_len = 0;
+
+            if (rx_data != NULL && rcv_len != NULL && *rcv_len >= 4) {
+                tx_len = nfc_parse_and_respond(
+                    rx_data, *rcv_len,
+                    nfc_resp_buf, sizeof(nfc_resp_buf)
+                );
+            }
+
+            rfalNfcDataExchangeStart(
+                (tx_len > 0) ? nfc_resp_buf : NULL,
+                tx_len,
+                &rx_data,
+                &rcv_len,
+                RFAL_FWT_NONE
+            );
+            break;
+        }
+
+    case RFAL_NFC_STATE_LISTEN_SLEEP:
+        rfalNfcDataExchangeStart(NULL, 0, &rx_data, &rcv_len, RFAL_FWT_NONE);
+        break;
+
+    case RFAL_NFC_STATE_DATAEXCHANGE:
+    case RFAL_NFC_STATE_START_DISCOVERY:
+    case RFAL_NFC_STATE_IDLE:
+    default:
+        break;
+    }
+}
+static void init_context(t4t_context_t *ctx)
+{
+    ctx->state = STATE_IDLE;
+    ctx->selected_file = FILE_NONE;
+
+    ctx->cc_file = InformationBlock;
+    ctx->cc_file_len = sizeof(InformationBlock);
+    ctx->ndef_file = ndefFile;
+    ctx->ndef_file_len = sizeof(ndefFile);
+    ctx->fid_cc = FID_CC;
+    ctx->fid_ndef = FID_NDEF;
+    ctx->ndef_write_allowed = true;
+}
+
+uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw )
+{
+    buf[0] = (uint8_t)(sw >> 8);
+    buf[1] = (uint8_t)(sw & 0xFF);
+    return 2;
+}
 
