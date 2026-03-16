@@ -9,6 +9,7 @@
 #include "flash_storage.h"
 #include "hw_crypto.h"
 #include "app_test.h"
+#include "demo_ce.h"
 #include "nfc.h"
 #include "nfc_test.h"
 
@@ -323,7 +324,7 @@ noreturn void app_run(void) {
 
 		app_ctaphid_task();
 
-		// demoTask();
+		app_nfc_task();
 
 	}
 
