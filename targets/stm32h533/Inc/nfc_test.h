@@ -9,6 +9,7 @@
 #define DEMO_ST_NOTINIT               0    /*!< Demo State:  Not initialized */
 #define DEMO_ST_START_DISCOVERY       1    /*!< Demo State:  Start Discovery */
 #define DEMO_ST_DISCOVERY             2    /*!< Demo State:  Discovery       */
+#define DEMO_ST_CE_ACTIVE             3    /*!< Demo State:  Active          */
 
 void run_nfc_tests(void);
 
