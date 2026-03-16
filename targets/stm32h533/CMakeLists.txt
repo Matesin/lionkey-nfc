@@ -147,8 +147,7 @@ target_link_libraries(app_hw_crypto
 		PUBLIC hash stm32cubemx
 )
 
-add_library(core STATIC
-		../../core/ctap_nfc.c)
+add_library(core STATIC)
 target_sources(core PUBLIC
 		../../core/ctap.c
 		../../core/ctap_asn1.c
@@ -167,6 +166,7 @@ target_sources(core PUBLIC
 		../../core/ctap_string.c
 		../../core/ctaphid.c
 		../../core/utils.c
+		../../core/ctap_nfc.c
 )
 target_include_directories(core PUBLIC ../../core Inc)
 target_link_libraries(core PUBLIC
@@ -312,6 +312,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
+		NFC_DEMO_CE=1
+#		NFC_DEMO_BLOCKING=1
 )
 
 # Add linked libraries
