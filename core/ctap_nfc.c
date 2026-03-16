@@ -29,33 +29,48 @@ static ctap_response_t nfc_ctap_response = {
  * @return true if parsing was successful, false if the APDU format is invalid
  *
  */
-bool nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out) {
-    if (raw_len < 4) return false;
+apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out) {
+    if (raw_len < 4) return  APDU_ERR_TOO_SHORT;
 
     out->cla  = raw[0];
     out->ins  = raw[1];
     out->p1   = raw[2];
     out->p2   = raw[3];
     out->data = NULL;
-    out->lc   = 0;
-    out->le   = 0;
+    out->lc   = 0U;
+    out->le   = 0U;
 
-    if (raw_len == 4) return true;
+    if (raw_len == 4) return APDU_PARSE_OK;
 
-    /* extended length APDU: Lc = 0x00 + 2 bytes */
-    if (raw[4] == 0x00 && raw_len >= 7) {
-        out->lc = (raw[5] << 8) | raw[6];
-        if (raw_len < (size_t)(7 + out->lc)) return false;
-        out->data = (uint8_t *)&raw[7];
-        if (raw_len > (size_t)(7 + out->lc + 2)) return false;
-    } else {
-        /* short APDU */
-        out->lc = raw[4];
-        if (raw_len < (size_t)(5 + out->lc)) return false;
-        out->data = (uint8_t *)&raw[5];
+    if (raw_len == 5U)
+    {
+        out->le = raw[4];
+        return APDU_PARSE_OK; /* Case 2S */
     }
 
-    return true;
+    /* len >= 6 */
+    {
+        uint8_t lc = raw[4];
+
+        /* Case 3S: 4 header + 1 Lc + Lc data */
+        if (raw_len == (size_t)(5U + lc))
+        {
+            out->lc = lc;
+            out->data = &raw[5];
+            return APDU_PARSE_OK;
+        }
+
+        /* Case 4S: 4 header + 1 Lc + Lc data + 1 Le */
+        if (raw_len == (size_t)(6U + lc))
+        {
+            out->lc = lc;
+            out->data = &raw[5];
+            out->le = raw[5U + lc];
+            return APDU_PARSE_OK;
+        }
+    }
+
+    return APDU_ERR_MALFORMED;
 }
 
 /**
@@ -135,6 +150,155 @@ void nfc_process_apdu(
     }
 
     *sw = NFC_SW_INS_UNKNOWN;
+}
+uint16_t nfc_handle_select(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp)
+{
+    static const uint8_t ndef_aid[] = {0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01};
+
+    uint16_t fid;
+
+    if ((ctx == NULL) || (apdu == NULL))
+    {
+        debug_log(red("NFC ERROR: Invalid arguments")nl);
+        return 0;
+    }
+
+    /* SELECT for T4T should carry data */
+    if (apdu->data == NULL)
+    {
+        return nfc_put_sw(rsp, NFC_SW_WRONG_LENGTH);
+    }
+
+    /* Select by DF name (AID) */
+    if ((apdu->p1 == 0x04U) && (apdu->p2 == 0x00U))
+    {
+        if ((apdu->lc == sizeof(ndef_aid)) &&
+            (memcmp(apdu->data, ndef_aid, sizeof(ndef_aid)) == 0))
+        {
+            ctx->state = STATE_APP_SELECTED;
+            ctx->selected_file = FILE_NONE;
+            return nfc_put_sw(rsp, NFC_SW_OK);
+        }
+
+        ctx->state = STATE_IDLE;
+        ctx->selected_file = FILE_NONE;
+        return nfc_put_sw(rsp, NFC_SW_FILE_NOT_FOUND);
+    }
+
+    /* Select by file ID */
+    if ((apdu->p1 == 0x00U) && (apdu->p2 == 0x0CU))
+    {
+        if ((ctx->state < STATE_APP_SELECTED) || (apdu->lc != 2U))
+        {
+            return nfc_put_sw(rsp, NFC_SW_FILE_NOT_FOUND);
+        }
+
+        fid = ((uint16_t)apdu->data[0] << 8) | apdu->data[1];
+
+        if (fid == ctx->fid_cc)
+        {
+            ctx->selected_file = FILE_CC;
+            return nfc_put_sw(rsp, NFC_SW_OK);
+        }
+
+        if (fid == ctx->fid_ndef)
+        {
+            ctx->selected_file = FILE_NDEF;
+            return nfc_put_sw(rsp, NFC_SW_OK);
+        }
+
+        ctx->selected_file = FILE_NONE;
+        return nfc_put_sw(rsp, NFC_SW_FILE_NOT_FOUND);
+    }
+
+    return nfc_put_sw(rsp, NFC_SW_FUNC_NOT_SUPPORTED);
+}
+uint16_t nfc_handle_read(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp, uint16_t rsp_len)
+{
+    const uint8_t *src = NULL;
+    uint16_t src_len = 0U;
+    uint16_t offset = ((uint16_t)apdu->p1 << 8) | apdu->p2;
+    uint16_t to_read = apdu->le;
+
+    if (rsp_len < 2)
+    {
+        // TODO: Better error handling
+        return nfc_put_sw(rsp, NFC_SW_WRONG_LENGTH);
+    }
+
+    if (ctx->selected_file == FILE_NONE)
+    {
+        return nfc_put_sw(rsp, NFC_SW_FILE_SELECTED);
+    }
+
+    if (ctx->selected_file == FILE_CC)
+    {
+        src = ctx->cc_file;
+        src_len = ctx->cc_file_len;
+    }
+    else if (ctx->selected_file == FILE_NDEF)
+    {
+        src = ctx->ndef_file;
+        src_len = ctx->ndef_file_len;
+    }
+    else
+    {
+        return nfc_put_sw(rsp, NFC_SW_FILE_NOT_FOUND);
+    }
+
+    if (offset > src_len)
+    {
+        return nfc_put_sw(rsp, NFC_SW_WRONG_PARAMS);
+    }
+
+    if ((uint32_t)offset + to_read > src_len)
+    {
+        to_read = (uint16_t)(src_len - offset);
+    }
+
+    if (rsp_len < (uint16_t)(to_read + 2U))
+    {
+        return nfc_put_sw(rsp, NFC_SW_NOT_ENOUGH_MEMORY);
+    }
+
+    if (to_read > 0U)
+    {
+        memcpy(rsp, &src[offset], to_read);
+    }
+
+    rsp[to_read]     = 0x90U;
+    rsp[to_read + 1] = 0x00U;
+    return (uint16_t)(to_read + 2U);
+}
+
+uint16_t nfc_handle_update(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp)
+{
+    const uint16_t offset = ((uint16_t)apdu->p1 << 8) | apdu->p2;
+
+    if (!ctx->ndef_write_allowed)
+    {
+        return nfc_put_sw(rsp, NFC_SW_SECURITY_STATUS_NOT_SAT);
+    }
+
+    if (apdu->data == NULL)
+    {
+        return nfc_put_sw(rsp, NFC_SW_WRONG_LENGTH);
+    }
+
+    if (ctx->selected_file != FILE_NDEF)
+    {
+        return nfc_put_sw(rsp, NFC_SW_FILE_NOT_FOUND);
+    }
+
+
+    if ((uint32_t)offset + apdu->lc > ctx->ndef_file_len)
+    {
+        return nfc_put_sw(rsp, 0x6282U);
+    }
+
+    memcpy(&ctx->ndef_file[offset], apdu->data, apdu->lc);
+
+    return nfc_put_sw(rsp, NFC_SW_OK);
 }
 
 /**

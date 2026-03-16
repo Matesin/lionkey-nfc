@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "ctaphid.h"
+#include "nfc.h"
 
 //TODO: Add doxygen
 
@@ -25,34 +26,31 @@
 #define NFC_CLA_ISO         0x00
 #define NFC_CLA_FIDO        0x80
 
-/* Status Words */
-#define NFC_SW_OK           0x9000
-#define NFC_SW_NOT_FOUND    0x6A82
-#define NFC_SW_WRONG_DATA   0x6A80
-#define NFC_SW_INS_UNKNOWN  0x6D00
-#define NFC_SW_CLA_UNKNOWN  0x6E00
-#define NFC_SW_CONDITIONS   0x6985
-#define NFC_SW_WRONG_LENGTH 0x6700
-
 typedef struct {
-    uint8_t  cla;
-    uint8_t  ins;
-    uint8_t  p1;
-    uint8_t  p2;
-    uint16_t lc;        /* data length */
-    uint8_t *data;      /* CTAP cmd + CBOR */
-    uint16_t le;
+    uint8_t  cla;           /* class */
+    uint8_t  ins;           /* instruction */
+    uint8_t  p1;            /* parameter 1 */
+    uint8_t  p2;            /* parameter 2 */
+    uint16_t lc;            /* data length */
+    const uint8_t *data;    /* CTAP cmd + CBOR */
+    uint16_t le;            /* exp resp len */
 } nfc_apdu_t;
 
-typedef struct {
-    uint8_t  *buf;
-    size_t    len;
-    uint16_t  sw;       /* status word (9000, 6A82 ...) */
-} nfc_rapdu_t;
+typedef enum
+{
+    APDU_PARSE_OK = 0,
+    APDU_ERR_NULL,
+    APDU_ERR_TOO_SHORT,
+    APDU_ERR_MALFORMED,
+    APDU_ERR_UNSUPPORTED_CASE,
+    APDU_ERR_OTHER
+} apdu_parse_status_t;
 
-bool nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out);
+apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out);
 size_t nfc_build_response(const uint8_t *data, size_t data_len, uint16_t sw, uint8_t *out_buf, size_t out_buf_size);
 void nfc_process_apdu(const nfc_apdu_t *apdu, uint8_t *resp_buf, size_t resp_buf_size, size_t *resp_len, uint16_t *sw);
-
+uint16_t nfc_handle_select(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp);
+uint16_t nfc_handle_read(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp, uint16_t rsp_len);
+uint16_t nfc_handle_update(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp);
 
 #endif //LIONKEY_CTAP_NFC_H
