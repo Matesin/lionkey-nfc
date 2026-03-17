@@ -25,53 +25,55 @@ rfalNfcDevice *nfcDevice;
 uint8_t *nfcId = 0;
 bool exchange_pending = false;
 
+
+static rfalNfcState rf_state;
+static rfalNfcState prev_rf_state = -1;
+
 #ifndef NFC_DEMO_BLOCKING
 static ce_state_t ce_state = CE_STATE_IDLE;
-
-static uint8_t  *ceRxData = NULL;
-static uint16_t *ceRcvLen = NULL;
-static uint8_t   ceTxBuf[150];
-static uint16_t  ceTxLen = 0;
+static ce_state_t prev_ce_state = -1;
+static uint8_t  *rx_data = NULL;
+static uint16_t *rcv_len = NULL;
+static uint8_t   tx_buf[150];
+static uint16_t  tx_len = 0;
 
 static void demoCE_reset(void)
 {
     ce_state = CE_STATE_IDLE;
-    ceRxData   = NULL;
-    ceRcvLen   = NULL;
-    ceTxLen    = 0;
+    rx_data   = NULL;
+    rcv_len   = NULL;
+    tx_len    = 0;
 }
 
 static bool demoCE_startRx(void)
 {
-    ReturnCode err;
-
-    err = rfalNfcDataExchangeStart(NULL, 0, &ceRxData, &ceRcvLen, RFAL_FWT_NONE);
-    if (err == RFAL_ERR_NONE)
+    rx_data = NULL;
+    rcv_len = NULL;
+    /* Receive the command from the reader */
+    const ReturnCode err = rfalNfcDataExchangeStart(NULL, 0, &rx_data, &rcv_len, RFAL_FWT_NONE);
+    if (err != RFAL_ERR_NONE)
     {
-        debug_log("CE: start RX successful" nl);
-        ce_state = CE_STATE_WAIT_RX;
-        return true;
+        debug_log("CE start RX failed: %d" nl, err);
+        // ce_state = CE_STATE_ERROR_RECOVERY;
+        return false;
     }
-
-    debug_log("CE start RX failed: %d" nl, err);
-    ce_state = CE_STATE_ERROR_RECOVERY;
-    return false;
+    debug_log("CE: start RX successful" nl);
+    ce_state = CE_STATE_WAIT_RX;
+    return true;
 }
 
-static bool demoCE_startTx(uint8_t *txData, uint16_t txLen)
+static bool demoCE_startTx(uint8_t *tx_data, uint16_t tx_data_len)
 {
-    ReturnCode err;
-
-    err = rfalNfcDataExchangeStart(txData, txLen, &ceRxData, &ceRcvLen, RFAL_FWT_NONE);
-    if (err == RFAL_ERR_NONE)
+    const ReturnCode err = rfalNfcDataExchangeStart(tx_data, tx_data_len, &rx_data, &rcv_len, RFAL_FWT_NONE);
+    if (err != RFAL_ERR_NONE)
     {
-        ce_state = CE_STATE_WAIT_TX;
-        return true;
+        debug_log("CE start TX failed: %d" nl, err);
+        ce_state = CE_STATE_ERROR_RECOVERY;
+        return false;
     }
-
-    debug_log("CE start TX failed: %d" nl, err);
-    ce_state = CE_STATE_ERROR_RECOVERY;
-    return false;
+    debug_log("CE: start TX successful" nl);
+    ce_state = CE_STATE_WAIT_TX;
+    return true;
 }
 #endif
 
@@ -183,29 +185,37 @@ static bool demoCE_task(void)
     uint8_t *rxData;
     uint16_t *rcvLen;
     uint8_t  txBuf[150];
-    uint16_t txLen;
+    uint16_t tx_len;
 
     do
     {
         rfalNfcWorker();
+        rf_state = rfalNfcGetState();
 
-        switch( rfalNfcGetState() )
+        if (rf_state != prev_rf_state)
+            debug_log("rf state: %d" nl, rf_state);
+        prev_rf_state = rf_state;
+
+        switch( rf_state )
         {
         case RFAL_NFC_STATE_ACTIVATED:
+            /* Start first transceive to receive the first command from the reader. The response will be sent in the next loop iteration when the state is RFAL_NFC_STATE_DATAEXCHANGE_DONE */
             err = demoTransceiveBlocking( NULL, 0, &rxData, &rcvLen, RFAL_FWT_NONE);
             break;
 
 
         case RFAL_NFC_STATE_DATAEXCHANGE:
         case RFAL_NFC_STATE_DATAEXCHANGE_DONE:
-            txLen = demoCeT4T( rxData, *rcvLen, txBuf, sizeof(txBuf) );
-            err   = demoTransceiveBlocking( txBuf, txLen, &rxData, &rcvLen, RFAL_FWT_NONE );
+            /* Process the received command and prepare the response to be sent in the next loop iteration */
+            tx_len = demoCeT4T( rxData, *rcvLen, txBuf, sizeof(txBuf) );
+            err   = demoTransceiveBlocking( txBuf, tx_len, &rxData, &rcvLen, RFAL_FWT_NONE );
             break;
 
         case RFAL_NFC_STATE_START_DISCOVERY:
             return false;
 
         case RFAL_NFC_STATE_LISTEN_SLEEP:
+            /* In Listen Sleep state, the reader may send a command to wake up the tag. Start a transceive to receive this command and wake up the tag. The response will be sent in the next loop iteration when the state is RFAL_NFC_STATE_DATAEXCHANGE_DONE */
             err = demoTransceiveBlocking(NULL, 0, &rxData, &rcvLen, RFAL_FWT_NONE);
             break;
         default:
@@ -219,10 +229,17 @@ static bool demoCE_task(void)
 #else
 
     ReturnCode err;
-    rfalNfcState rfState = rfalNfcGetState();
 
-    debug_log("rf state: %d" nl, rfState);
-    switch (rfState)
+    rfalNfcWorker();
+
+    rf_state = rfalNfcGetState();
+    if (rf_state != prev_rf_state)
+    {
+        debug_log("rf state: %d" nl, rf_state);
+    }
+    prev_rf_state = rf_state;
+
+    switch (rf_state)
     {
         case RFAL_NFC_STATE_START_DISCOVERY:
             demoCE_reset();
@@ -234,25 +251,27 @@ static bool demoCE_task(void)
                 debug_log("CE: start waiting for command" nl);
                 demoCE_startRx();
             }
-            else if (ce_state == CE_STATE_ERROR_RECOVERY)
-            {
-                rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
-            }
             break;
 
         case RFAL_NFC_STATE_DATAEXCHANGE:
         case RFAL_NFC_STATE_DATAEXCHANGE_DONE:
-            break;
         case RFAL_NFC_STATE_LISTEN_SLEEP:
+            break;
         default:
             return false;
     }
-    debug_log("ce state: %d" nl, ce_state);
+
+    if (ce_state != prev_ce_state)
+    {
+        debug_log("ce state: %d" nl, ce_state);
+    }
+    prev_ce_state = ce_state;
+
     switch (ce_state)
     {
         case CE_STATE_IDLE:
-            debug_log("CE: idle -> start RX" nl);
-            demoCE_startRx();
+            // debug_log("CE idle, waiting for command" nl);
+            // demoCE_startRx();
             return false;
 
         case CE_STATE_WAIT_RX:
@@ -260,6 +279,13 @@ static bool demoCE_task(void)
 
             if (err == RFAL_ERR_BUSY)
             {
+                return false;
+            }
+
+            if (err == RFAL_ERR_SLEEP_REQ)
+            {
+                debug_log("CE: peer requested sleep" nl);
+                ce_state = CE_STATE_IDLE;
                 return false;
             }
 
@@ -271,7 +297,7 @@ static bool demoCE_task(void)
                 return false;
             }
 
-            if ((ceRxData == NULL) || (ceRcvLen == NULL))
+            if ((rx_data == NULL) || (rcv_len == NULL))
             {
                 debug_log("CE RX pointers invalid" nl);
                 ce_state = CE_STATE_ERROR_RECOVERY;
@@ -279,14 +305,22 @@ static bool demoCE_task(void)
                 return false;
             }
 
+            if (*rcv_len == 0U)
+            {
+                debug_log("CE RX empty APDU" nl);
+                ce_state = CE_STATE_IDLE;
+                return false;
+            }
+
+            debug_log("CE: APDU received (%u bytes)" nl, *rcv_len);
             ce_state = CE_STATE_PROCESS_RX;
             return false;
 
         case CE_STATE_PROCESS_RX:
-            ceTxLen = demoCeT4T(ceRxData, *ceRcvLen, ceTxBuf, sizeof(ceTxBuf));
-            debug_log("CE: command processed, response len = %u" nl, ceTxLen);
+            tx_len = demoCeT4T(rx_data, *rcv_len, tx_buf, sizeof(tx_buf));
+            debug_log("CE: APDU processed, response len = %u" nl, tx_len);
 
-            if (!demoCE_startTx(ceTxBuf, ceTxLen))
+            if (!demoCE_startTx(tx_buf, tx_len))
             {
                 rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
             }
@@ -300,6 +334,13 @@ static bool demoCE_task(void)
                 return false;
             }
 
+            if (err == RFAL_ERR_SLEEP_REQ)
+            {
+                debug_log("CE: sleep requested after TX" nl);
+                ce_state = CE_STATE_IDLE;
+                return false;
+            }
+
             if (err != RFAL_ERR_NONE)
             {
                 debug_log("CE TX failed: %d" nl, err);
@@ -308,26 +349,38 @@ static bool demoCE_task(void)
                 return false;
             }
 
-            debug_log("CE: response sent, wait next command" nl);
-            if (!demoCE_startRx())
+            if ((rx_data != NULL) && (rcv_len != NULL) && (*rcv_len > 0U))
             {
-                rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
+                debug_log("CE: next APDU received (%u bytes)" nl, *rcv_len);
+                ce_state = CE_STATE_PROCESS_RX;
+            }
+            else
+            {
+                /*
+                 * Exchange completed but no next APDU is available.
+                 * Re-arm the first receive path.
+                 */
+                ce_state = CE_STATE_IDLE;
+                demoCE_startRx();
             }
             return false;
+
 
         case CE_STATE_ERROR_RECOVERY:
             rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
             return false;
-
         default:
             demoCE_reset();
             return false;
     }
+
 #endif
+
 #else
     return true;
 #endif
 }
+
 
 
 
@@ -367,9 +420,12 @@ ReturnCode demoTransceiveBlocking( uint8_t *txBuf, uint16_t txBufSize, uint8_t *
         do{
             rfalNfcWorker();
             err = rfalNfcDataExchangeGetStatus();
-            debug_log("busy"nl);
         }
         while( err == RFAL_ERR_BUSY );
+        if (txBuf != NULL)
+        {
+            debug_log("TX: %s" nl, hex2Str(txBuf, txBufSize));
+        }
     }
     return err;
 }
