@@ -47,17 +47,27 @@ static uint8_t InformationBlock[] = { 0x10,                                     
 static uint8_t        ndefFile[NDEF_SIZE];  /*!< Buffer to store NDEF File                 */
 static rfalNfcDiscoverParam discParam;
 
-rfalNfcState prev_state = -1;
+static rfalNfcState rf_state;
+static rfalNfcState prev_rf_state = -1;
 
-uint8_t select_state = NFC_DISCOVERY;
-int8_t selected_index = -1;
-t4t_context_t ce_ctx;
+static ce_state_t ce_state = CE_STATE_IDLE;
+static ce_state_t prev_ce_state = -1;
 
+static uint8_t select_state = NFC_DISCOVERY;
+static int8_t selected_index = -1;
+static t4t_context_t ce_ctx;
+
+static uint8_t  *rx_data  = NULL;
+static uint16_t *rcv_len  = NULL;
+static uint8_t   tx_buf[TX_BUF_SIZE];
+static uint16_t  tx_len = 0;
 
 static bool nfc_init_params(void);
 static void nfc_notify(rfalNfcState st);
 static void init_context(t4t_context_t *ctx);
-static void nfc_ce_task(void);
+static bool nfc_ce_task(void);
+static bool nfc_start_rx(void);
+static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len);
 
 void nfc_init(void)
 {
@@ -66,8 +76,11 @@ void nfc_init(void)
         debug_log(red("Failed to initialize NFC") nl);
         return;
     }
-    demoCeInit(NULL);
+    #ifdef NFC_DEMO_CE
+    // demoCeInit(NULL);
+    #else
     init_context(&ce_ctx);
+    #endif
     // run_nfc_tests();
     debug_log("NFC initialized" nl);
 }
@@ -123,25 +136,25 @@ uint16_t nfc_parse_and_respond(uint8_t *rxData, uint16_t rxDataLen, uint8_t *txB
     switch(rxData[1])
     {
     case T4T_INS_SELECT:
-        return nfc_handle_select(&ce_ctx, &apdu, rxData);
+        return nfc_handle_select(&ce_ctx, &apdu, txBuf);
 
     case T4T_INS_READ:
         return nfc_handle_read(&ce_ctx, &apdu, txBuf, txBufLen);
 
     case T4T_INS_UPDATE:
-        return nfc_handle_update(&ce_ctx, &apdu, rxData);
+        return nfc_handle_update(&ce_ctx, &apdu, txBuf);
 
     default:
         /* MISRA 16.4: No empty case allowed */
         break;
     }
-    return nfc_put_sw(txBuf, NFC_SW_CLA_NOT_SUPPORTED);
+    return nfc_put_sw(txBuf, NFC_SW_INS_NOT_SUPPORTED);
 }
 
 static void nfc_notify(rfalNfcState st)
 {
     // don't log state unless it has changed
-    if (prev_state == st) {
+    if (prev_rf_state == st) {
         return;
     }
     switch(st)
@@ -159,88 +172,180 @@ static void nfc_notify(rfalNfcState st)
             /* MISRA 16.4: No empty default case allowed */
             break;
     }
-    prev_state = st;
+    prev_rf_state = st;
 }
 
 void app_nfc_task(void)
 {
-    #if NFC_DEMO_CE
+    #ifdef NFC_DEMO_CE
         demoTask();
     #else
 
-        rfalNfcWorker();
-        switch (select_state)
-        {
-        case NFC_START_DISCOVERY:
-            select_state = NFC_DISCOVERY;
-            break;
-        case NFC_DISCOVERY:
-            if (rfalNfcIsDevActivated(rfalNfcGetState()))
-            {
-                select_state = NFC_CE_ACTIVE;
-            }
-            break;
-        case NFC_CE_ACTIVE:
-            nfc_ce_task();
-            break;
-        case NFC_NOTINIT:
-        default:
-            /* MISRA 16.4: No empty case allowed */
-            break;
-        }
+    rfalNfcWorker();
 
-    // if ((select_state == NFC_CE_ACTIVE) && (rfalNfcDataExchangeGetStatus() != RFAL_ERR_BUSY))
-    // {
-    //     rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
-    //     debug_log(red("NFC: session ended") nl);
-    //     select_state = NFC_START_DISCOVERY;
-    // }
-#endif
-}
-
-static void nfc_ce_task(void)
-{
-    static uint8_t  *rx_data  = NULL;
-    static uint16_t *rcv_len  = NULL;
-    static uint8_t   nfc_resp_buf[512];
-
-    switch (rfalNfcGetState())
+    switch (select_state)
     {
-    case RFAL_NFC_STATE_ACTIVATED:
-        rfalNfcDataExchangeStart(NULL, 0, &rx_data, &rcv_len, RFAL_FWT_NONE);
+    case NFC_START_DISCOVERY:
+        init_context(&ce_ctx); // reinitialise the context
+        select_state = NFC_DISCOVERY;
         break;
-    case RFAL_NFC_STATE_DATAEXCHANGE_DONE:
+
+    case NFC_DISCOVERY:
+        if (rfalNfcIsDevActivated(rfalNfcGetState()))
         {
-            uint16_t tx_len = 0;
-
-            if (rx_data != NULL && rcv_len != NULL && *rcv_len >= 4) {
-                tx_len = nfc_parse_and_respond(
-                    rx_data, *rcv_len,
-                    nfc_resp_buf, sizeof(nfc_resp_buf)
-                );
-            }
-
-            rfalNfcDataExchangeStart(
-                (tx_len > 0) ? nfc_resp_buf : NULL,
-                tx_len,
-                &rx_data,
-                &rcv_len,
-                RFAL_FWT_NONE
-            );
-            break;
+            init_context(&ce_ctx);
+            select_state = NFC_CE_ACTIVE;
         }
-
-    case RFAL_NFC_STATE_LISTEN_SLEEP:
-        rfalNfcDataExchangeStart(NULL, 0, &rx_data, &rcv_len, RFAL_FWT_NONE);
         break;
 
-    case RFAL_NFC_STATE_DATAEXCHANGE:
-    case RFAL_NFC_STATE_START_DISCOVERY:
-    case RFAL_NFC_STATE_IDLE:
+    case NFC_CE_ACTIVE:
+        if (nfc_ce_task())
+        {
+            debug_log("NFC: session ended" nl);
+            select_state = NFC_START_DISCOVERY;
+        }
+        break;
+
+    case NFC_NOTINIT:
     default:
         break;
     }
+#endif
 }
+
+static bool nfc_ce_task(void)
+{
+    ReturnCode err;
+
+    switch (rfalNfcGetState())
+    {
+    case RFAL_NFC_STATE_START_DISCOVERY:
+        /* Reinitialize context for a new session */
+        init_context(&ce_ctx); 
+        return true;
+        
+    case RFAL_NFC_STATE_ACTIVATED:
+        if (ce_state == CE_STATE_IDLE)
+        {
+            debug_log("CE: start waiting for command" nl);
+            nfc_start_rx();
+        }
+        break;
+        
+    case RFAL_NFC_STATE_DATAEXCHANGE_DONE:
+    case RFAL_NFC_STATE_DATAEXCHANGE:
+    case RFAL_NFC_STATE_LISTEN_SLEEP:
+        break;
+    default:
+        return false;
+    }
+    switch (ce_state)
+    {
+        case CE_STATE_IDLE:
+            return false;
+
+        case CE_STATE_WAIT_RX:
+            err = rfalNfcDataExchangeGetStatus();
+
+            if (err == RFAL_ERR_BUSY)
+            {
+                return false;
+            }
+
+            if (err == RFAL_ERR_SLEEP_REQ)
+            {
+                debug_log("CE: peer requested sleep" nl);
+                ce_state = CE_STATE_IDLE;
+                return false;
+            }
+
+            if (err != RFAL_ERR_NONE)
+            {
+                debug_log("CE RX failed: %d" nl, err);
+                ce_state = CE_STATE_ERROR_RECOVERY;
+                rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
+                return false;
+            }
+
+            if ((rx_data == NULL) || (rcv_len == NULL))
+            {
+                debug_log("CE RX pointers invalid" nl);
+                ce_state = CE_STATE_ERROR_RECOVERY;
+                rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
+                return false;
+            }
+
+            if (*rcv_len == 0U)
+            {
+                debug_log("CE RX empty APDU" nl);
+                ce_state = CE_STATE_IDLE;
+                return false;
+            }
+
+            debug_log("CE: APDU received (%u bytes)" nl, *rcv_len);
+            ce_state = CE_STATE_PROCESS_RX;
+            return false;
+
+        case CE_STATE_PROCESS_RX:
+            tx_len = nfc_parse_and_respond(rx_data, *rcv_len, tx_buf, sizeof(tx_buf));
+            debug_log("CE: APDU processed, response len = %u" nl, tx_len);
+
+            if (!nfc_start_tx(tx_buf, tx_len))
+            {
+                rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
+            }
+            return false;
+
+        case CE_STATE_WAIT_TX:
+            err = rfalNfcDataExchangeGetStatus();
+
+            if (err == RFAL_ERR_BUSY)
+            {
+                return false;
+            }
+
+            if (err == RFAL_ERR_SLEEP_REQ)
+            {
+                debug_log("CE: sleep requested after TX" nl);
+                ce_state = CE_STATE_IDLE;
+                return false;
+            }
+
+            if (err != RFAL_ERR_NONE)
+            {
+                debug_log("CE TX failed: %d" nl, err);
+                ce_state = CE_STATE_ERROR_RECOVERY;
+                rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
+                return false;
+            }
+
+            if ((rx_data != NULL) && (rcv_len != NULL) && (*rcv_len > 0U))
+            {
+                debug_log("CE: next APDU received (%u bytes)" nl, *rcv_len);
+                ce_state = CE_STATE_PROCESS_RX;
+            }
+            else
+            {
+                /*
+                 * Exchange completed but no next APDU is available.
+                 * Re-arm the first receive path.
+                 */
+                ce_state = CE_STATE_IDLE;
+                nfc_start_rx();
+            }
+            return false;
+
+
+        case CE_STATE_ERROR_RECOVERY:
+            rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
+            return false;
+        default:
+            debug_log(red("ERROR: CE: unknown state"nl));
+            ce_state = CE_STATE_ERROR_RECOVERY;
+            return false;
+    }
+}
+
 static void init_context(t4t_context_t *ctx)
 {
     ctx->state = STATE_IDLE;
@@ -253,6 +358,12 @@ static void init_context(t4t_context_t *ctx)
     ctx->fid_cc = FID_CC;
     ctx->fid_ndef = FID_NDEF;
     ctx->ndef_write_allowed = true;
+
+    ce_state = CE_STATE_IDLE;
+    /* reset transaction state */
+    rx_data = NULL;
+    rcv_len = NULL;
+    tx_len = 0;
 }
 
 uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw )
@@ -260,5 +371,35 @@ uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw )
     buf[0] = (uint8_t)(sw >> 8);
     buf[1] = (uint8_t)(sw & 0xFF);
     return 2;
+}
+
+static bool nfc_start_rx(void)
+{
+    rx_data = NULL;
+    rcv_len = NULL;
+    /* Receive the command from the reader */
+    const ReturnCode err = rfalNfcDataExchangeStart(NULL, 0, &rx_data, &rcv_len, RFAL_FWT_NONE);
+    if (err != RFAL_ERR_NONE)
+    {
+        debug_log("CE start RX failed: %d" nl, err);
+        ce_state = CE_STATE_ERROR_RECOVERY;
+        return false;
+    }
+    debug_log("CE: start RX successful" nl);
+    ce_state = CE_STATE_WAIT_RX;
+    return true;
+}
+static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len)
+{
+    const ReturnCode err = rfalNfcDataExchangeStart(tx_data, tx_data_len, &rx_data, &rcv_len, RFAL_FWT_NONE);
+    if (err != RFAL_ERR_NONE)
+    {
+        debug_log("CE start TX failed: %d" nl, err);
+        ce_state = CE_STATE_ERROR_RECOVERY;
+        return false;
+    }
+    debug_log("CE: start TX successful" nl);
+    ce_state = CE_STATE_WAIT_TX;
+    return true;
 }
 

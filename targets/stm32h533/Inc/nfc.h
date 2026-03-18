@@ -40,6 +40,7 @@
 #define NFC_DISCOVERY           2 /*!< NFC state: discovery */
 #define NFC_CE_ACTIVE           3 /*!< NFC state: CE active */
 
+#define TX_BUF_SIZE             512
 #include <stdbool.h>
 #include <stdint.h>
 
