@@ -46,22 +46,23 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "ctaphid.h"
+
 
 /*! Enums -------------------------------------------------------------*/
-
-enum States
-{
-    STATE_IDLE                      = 0,    /*!< Emulated Tag state idle                  */
-    STATE_APP_SELECTED              = 1,    /*!< Emulated Tag state application selected  */
-    STATE_CC_SELECTED               = 2,    /*!< Emulated Tag state CCFile selected       */
-    STATE_FID_SELECTED              = 3,    /*!< Emulated Tag state FileID selected       */
-};
 
 enum Files
 {
     FILE_NONE = 0,
     FILE_CC   = 1,
     FILE_NDEF = 2
+};
+
+enum Apps
+{
+    APP_NONE = 0,
+    APP_NDEF,
+    APP_FIDO
 };
 
 typedef enum
@@ -75,8 +76,9 @@ typedef enum
 
 typedef struct
 {
-    uint8_t state;
     uint8_t selected_file;
+
+    uint8_t selected_app;
 
     const uint8_t *cc_file;
     uint16_t cc_file_len;
@@ -88,6 +90,11 @@ typedef struct
     uint16_t fid_ndef;
 
     bool ndef_write_allowed;
+
+    uint8_t  chain_buf[CTAPHID_MAX_PAYLOAD_LENGTH];
+
+    uint16_t chain_offset;
+    uint16_t chain_len;
 } t4t_context_t;
 
 /*! Funtion prototypes -------------------------------------------------------------*/

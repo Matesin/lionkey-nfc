@@ -47,14 +47,11 @@ static uint8_t InformationBlock[] = { 0x10,                                     
 static uint8_t        ndefFile[NDEF_SIZE];  /*!< Buffer to store NDEF File                 */
 static rfalNfcDiscoverParam discParam;
 
-static rfalNfcState rf_state;
 static rfalNfcState prev_rf_state = -1;
 
 static ce_state_t ce_state = CE_STATE_IDLE;
-static ce_state_t prev_ce_state = -1;
 
 static uint8_t select_state = NFC_DISCOVERY;
-static int8_t selected_index = -1;
 static t4t_context_t ce_ctx;
 
 static uint8_t  *rx_data  = NULL;
@@ -247,6 +244,7 @@ static bool nfc_ce_task(void)
             }
 
             debug_log("CE: APDU received (%u bytes)" nl, *rcv_len);
+            debug_log("Received APDU content: %s" nl, hex2Str(rx_data, *rcv_len));
             ce_state = CE_STATE_PROCESS_RX;
             return false;
 
@@ -321,8 +319,9 @@ static bool nfc_ce_task(void)
 
 static void init_context(t4t_context_t *ctx)
 {
-    ctx->state = STATE_IDLE;
     ctx->selected_file = FILE_NONE;
+
+    ctx->selected_app = APP_NONE;
 
     ctx->cc_file = InformationBlock;
     ctx->cc_file_len = sizeof(InformationBlock);
