@@ -302,38 +302,38 @@ uint16_t nfc_handle_update(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *
 }
 
 
-uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rxData, uint16_t rxDataLen, uint8_t *txBuf, uint16_t txBufLen )
+uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx_data_len, uint8_t *tx_buf, uint16_t tx_buf_len )
 {
     nfc_apdu_t apdu;
     apdu_parse_status_t err;
 
-    if (txBuf == NULL || txBufLen < 2) {
+    if ((ctx == NULL) || (tx_buf == NULL) || (tx_buf_len < 2U)) {
         debug_log(red("NFC ERROR: Invalid response buffer") nl);
         return NFC_PARSE_WRONG_SIZE;
     }
 
-    err = nfc_parse_apdu(rxData, rxDataLen, &apdu);
+    err = nfc_parse_apdu(rx_data, rx_data_len, &apdu);
 
     if (err != APDU_PARSE_OK) {
-        return nfc_put_sw(txBuf, NFC_SW_COND_NOT_SATISFIED);
+        return nfc_put_sw(tx_buf, NFC_SW_COND_NOT_SATISFIED);
     }
 
-    switch(rxData[1])
+    switch(rx_data[1])
     {
     case T4T_INS_SELECT:
-        return nfc_handle_select(ctx, &apdu, txBuf);
+        return nfc_handle_select(ctx, &apdu, tx_buf);
 
     case T4T_INS_READ:
-        return nfc_handle_read(ctx, &apdu, txBuf, txBufLen);
+        return nfc_handle_read(ctx, &apdu, tx_buf, tx_buf_len);
 
     case T4T_INS_UPDATE:
-        return nfc_handle_update(ctx, &apdu, txBuf);
+        return nfc_handle_update(ctx, &apdu, tx_buf);
 
     default:
         /* MISRA 16.4: No empty case allowed */
         break;
     }
-    return nfc_put_sw(txBuf, NFC_SW_INS_NOT_SUPPORTED);
+    return nfc_put_sw(tx_buf, NFC_SW_INS_NOT_SUPPORTED);
 }
 
 uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw )

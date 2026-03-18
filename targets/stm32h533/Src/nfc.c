@@ -77,7 +77,7 @@ void nfc_init(void)
         return;
     }
     #ifdef NFC_DEMO_CE
-    // demoCeInit(NULL);
+    demoCeInit(NULL);
     #else
     init_context(&ce_ctx);
     #endif
@@ -261,7 +261,7 @@ static bool nfc_ce_task(void)
             }
 
             debug_log("CE: APDU processed, response len = %u" nl, tx_len);
-
+            debug_log("Sent APDU content: %s" nl, hex2Str(tx_buf, tx_len));
             if (!nfc_start_tx(tx_buf, tx_len))
             {
                 rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
@@ -294,6 +294,7 @@ static bool nfc_ce_task(void)
             if ((rx_data != NULL) && (rcv_len != NULL) && (*rcv_len > 0U))
             {
                 debug_log("CE: next APDU received (%u bytes)" nl, *rcv_len);
+                debug_log("Received APDU content: %s" nl, hex2Str(rx_data, *rcv_len));
                 ce_state = CE_STATE_PROCESS_RX;
             }
             else
@@ -325,8 +326,10 @@ static void init_context(t4t_context_t *ctx)
 
     ctx->cc_file = InformationBlock;
     ctx->cc_file_len = sizeof(InformationBlock);
+
     ctx->ndef_file = ndefFile;
     ctx->ndef_file_len = sizeof(ndefFile);
+
     ctx->fid_cc = FID_CC;
     ctx->fid_ndef = FID_NDEF;
     ctx->ndef_write_allowed = true;
