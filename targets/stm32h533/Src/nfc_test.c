@@ -270,8 +270,6 @@ static bool demoCE_task(void)
     switch (ce_state)
     {
         case CE_STATE_IDLE:
-            // debug_log("CE idle, waiting for command" nl);
-            // demoCE_startRx();
             return false;
 
         case CE_STATE_WAIT_RX:
