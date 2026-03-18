@@ -251,7 +251,7 @@ static bool nfc_ce_task(void)
             return false;
 
         case CE_STATE_PROCESS_RX:
-            tx_len = nfc_parse_and_respond(rx_data, *rcv_len, tx_buf, sizeof(tx_buf));
+            tx_len = nfc_parse_and_respond(&ce_ctx, rx_data, *rcv_len, tx_buf, sizeof(tx_buf));
             debug_log("CE: APDU processed, response len = %u" nl, tx_len);
 
             if (!nfc_start_tx(tx_buf, tx_len))
