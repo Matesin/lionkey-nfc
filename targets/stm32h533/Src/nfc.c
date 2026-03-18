@@ -252,6 +252,14 @@ static bool nfc_ce_task(void)
 
         case CE_STATE_PROCESS_RX:
             tx_len = nfc_parse_and_respond(&ce_ctx, rx_data, *rcv_len, tx_buf, sizeof(tx_buf));
+
+            if (tx_len == NFC_PARSE_WRONG_SIZE)
+            {
+                ce_state = CE_STATE_ERROR_RECOVERY;
+                rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
+                return false;
+            }
+
             debug_log("CE: APDU processed, response len = %u" nl, tx_len);
 
             if (!nfc_start_tx(tx_buf, tx_len))
@@ -328,13 +336,6 @@ static void init_context(t4t_context_t *ctx)
     rx_data = NULL;
     rcv_len = NULL;
     tx_len = 0;
-}
-
-uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw )
-{
-    buf[0] = (uint8_t)(sw >> 8);
-    buf[1] = (uint8_t)(sw & 0xFF);
-    return 2;
 }
 
 static bool nfc_start_rx(void)

@@ -5,7 +5,6 @@
 #include "terminal.h"
 #include "ctap_nfc.h"
 #include "ctap.h"
-#include "main.h"
 
 #include "utils.h"
 
@@ -309,8 +308,8 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rxData, uint16_t rxD
     apdu_parse_status_t err;
 
     if (txBuf == NULL || txBufLen < 2) {
-        Error_Handler();
-        return 0;
+        debug_log(red("NFC ERROR: Invalid response buffer") nl);
+        return NFC_PARSE_WRONG_SIZE;
     }
 
     err = nfc_parse_apdu(rxData, rxDataLen, &apdu);
@@ -335,6 +334,13 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rxData, uint16_t rxD
         break;
     }
     return nfc_put_sw(txBuf, NFC_SW_INS_NOT_SUPPORTED);
+}
+
+uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw )
+{
+    buf[0] = (uint8_t)(sw >> 8);
+    buf[1] = (uint8_t)(sw & 0xFF);
+    return 2;
 }
 
 /**

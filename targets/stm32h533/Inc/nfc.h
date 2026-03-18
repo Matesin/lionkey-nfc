@@ -16,6 +16,8 @@
 #define FID_CC              0xE103    /*!< File ID number for CCFile                       */
 #define FID_NDEF            0x0001    /*!< File ID number for NDEF file                    */
 
+#define APDU_WRONG_SIZE     1
+
 /* Status Words */
 #define NFC_SW_OK                        0x9000U
 #define NFC_SW_FILE_NOT_FOUND            0x6A82U
@@ -90,7 +92,6 @@ typedef struct
 
 /*! Funtion prototypes -------------------------------------------------------------*/
 void nfc_init(void);
-uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw );
 void app_nfc_task(void);
 
 

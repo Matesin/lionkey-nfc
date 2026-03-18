@@ -26,6 +26,8 @@
 #define NFC_CLA_ISO         0x00
 #define NFC_CLA_FIDO        0x80
 
+#define NFC_PARSE_WRONG_SIZE 1U
+
 typedef struct {
     uint8_t  cla;           /* class */
     uint8_t  ins;           /* instruction */
@@ -53,5 +55,6 @@ uint16_t nfc_handle_select(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *
 uint16_t nfc_handle_read(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp, uint16_t rsp_len);
 uint16_t nfc_handle_update(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp);
 uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rxData, uint16_t rxDataLen, uint8_t *txBuf, uint16_t txBufLen );
+uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw );
 
 #endif //LIONKEY_CTAP_NFC_H
