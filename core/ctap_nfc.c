@@ -5,7 +5,7 @@
 #include "terminal.h"
 #include "ctap_nfc.h"
 #include "ctap.h"
-#include "rfal_platform.h"
+#include "main.h"
 
 #include "utils.h"
 
@@ -309,7 +309,7 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rxData, uint16_t rxD
     apdu_parse_status_t err;
 
     if (txBuf == NULL || txBufLen < 2) {
-        platformErrorHandle();
+        Error_Handler();
         return 0;
     }
 
