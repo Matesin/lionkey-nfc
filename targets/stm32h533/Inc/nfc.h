@@ -90,7 +90,6 @@ typedef struct
 
 /*! Funtion prototypes -------------------------------------------------------------*/
 void nfc_init(void);
-uint16_t nfc_parse_and_respond(uint8_t *rxData, uint16_t rxDataLen, uint8_t *txBuf, uint16_t txBufLen );
 uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw );
 void app_nfc_task(void);
 

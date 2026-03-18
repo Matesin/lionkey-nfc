@@ -115,42 +115,6 @@ static bool nfc_init_params(void)
     return false;
 }
 
-
-
-uint16_t nfc_parse_and_respond(uint8_t *rxData, uint16_t rxDataLen, uint8_t *txBuf, uint16_t txBufLen )
-{
-    nfc_apdu_t apdu;
-    apdu_parse_status_t err;
-
-    if (txBuf == NULL || txBufLen < 2) {
-        platformErrorHandle();
-        return 0;
-    }
-
-    err = nfc_parse_apdu(rxData, rxDataLen, &apdu);
-
-    if (err != APDU_PARSE_OK) {
-        return nfc_put_sw(txBuf, NFC_SW_COND_NOT_SATISFIED);
-    }
-
-    switch(rxData[1])
-    {
-    case T4T_INS_SELECT:
-        return nfc_handle_select(&ce_ctx, &apdu, txBuf);
-
-    case T4T_INS_READ:
-        return nfc_handle_read(&ce_ctx, &apdu, txBuf, txBufLen);
-
-    case T4T_INS_UPDATE:
-        return nfc_handle_update(&ce_ctx, &apdu, txBuf);
-
-    default:
-        /* MISRA 16.4: No empty case allowed */
-        break;
-    }
-    return nfc_put_sw(txBuf, NFC_SW_INS_NOT_SUPPORTED);
-}
-
 static void nfc_notify(rfalNfcState st)
 {
     // don't log state unless it has changed

@@ -5,6 +5,7 @@
 #include "terminal.h"
 #include "ctap_nfc.h"
 #include "ctap.h"
+#include "rfal_platform.h"
 
 #include "utils.h"
 
@@ -299,6 +300,41 @@ uint16_t nfc_handle_update(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *
     memcpy(&ctx->ndef_file[offset], apdu->data, apdu->lc);
 
     return nfc_put_sw(rsp, NFC_SW_OK);
+}
+
+
+uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rxData, uint16_t rxDataLen, uint8_t *txBuf, uint16_t txBufLen )
+{
+    nfc_apdu_t apdu;
+    apdu_parse_status_t err;
+
+    if (txBuf == NULL || txBufLen < 2) {
+        platformErrorHandle();
+        return 0;
+    }
+
+    err = nfc_parse_apdu(rxData, rxDataLen, &apdu);
+
+    if (err != APDU_PARSE_OK) {
+        return nfc_put_sw(txBuf, NFC_SW_COND_NOT_SATISFIED);
+    }
+
+    switch(rxData[1])
+    {
+    case T4T_INS_SELECT:
+        return nfc_handle_select(ctx, &apdu, txBuf);
+
+    case T4T_INS_READ:
+        return nfc_handle_read(ctx, &apdu, txBuf, txBufLen);
+
+    case T4T_INS_UPDATE:
+        return nfc_handle_update(ctx, &apdu, txBuf);
+
+    default:
+        /* MISRA 16.4: No empty case allowed */
+        break;
+    }
+    return nfc_put_sw(txBuf, NFC_SW_INS_NOT_SUPPORTED);
 }
 
 /**
