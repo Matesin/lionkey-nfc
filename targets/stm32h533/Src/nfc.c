@@ -32,19 +32,20 @@ static uint8_t SEL_RES     = 0x20U;                     /* SEL_RES / SAK */
   * Ln : Is the size of the actual stored NDEF data in bytes <BR>
   * Checksum : allows the Reader/Writer to check whether the Attribute Data are correct <BR>
   */
-static uint8_t InformationBlock[] = { 0x10,                                             /* Ver        */
-                                      0x08,                                             /* Nbr        */
-                                      0x08,                                             /* Nbw        */
-                                      0x00, 0x0F,                                       /* NmaxB      */
-                                      0x00, 0x00, 0x00, 0x00,                           /* RFU        */
-                                      0x00,                                             /* WriteFlag  */
-                                      0x01,                                             /* RWFlag     */
-                                      0x00, 0x00, 0x15,                                 /* Ln         */
-                                      0x00, 0x45                                        /* Checksum   */
-                                      };
+static uint8_t InformationBlock[] = {   0x00, 0x0F,                                       /* CCLEN      */
+                                        0x20,                                             /* T4T_VNo    */
+                                        0x00, 0x7F,                                       /* MLe        */
+                                        0x00, 0x7F,                                       /* MLc        */
+                                        0x04,                                             /* T          */
+                                        0x06,                                             /* L          */
+                                        (FID_NDEF & 0xFF00) >> 8, (FID_NDEF & 0x00FF),    /* V1         */
+                                        (NDEF_SIZE & 0xFF00) >> 8, (NDEF_SIZE & 0x00FF),  /* V2         */
+                                        0x00,                                             /* V3         */
+                                        0x00                                              /* V4         */
+                                    };
 
 
-static uint8_t        ndefFile[NDEF_SIZE];  /*!< Buffer to store NDEF File                 */
+static uint8_t        ndefFile[] = {    0x00, 0x10, 0xD1, 0x01, 0x0C, 0x55, 0x01, 0x6C, 0x69, 0x6F, 0x6E, 0x6B, 0x65, 0x79, 0x2E, 0x64, 0x65, 0x76 };
 static rfalNfcDiscoverParam discParam;
 
 static rfalNfcState prev_rf_state = -1;
