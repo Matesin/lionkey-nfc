@@ -34,8 +34,8 @@ static uint8_t SEL_RES     = 0x20U;                     /* SEL_RES / SAK */
   */
 static uint8_t InformationBlock[] = {   0x00, 0x0F,                                       /* CCLEN      */
                                         0x20,                                             /* T4T_VNo    */
-                                        0x00, 0x7F,                                       /* MLe        */
-                                        0x00, 0x7F,                                       /* MLc        */
+                                        0x10, 0x00,                                       /* MLe        */
+                                        0x10, 0x00,                                       /* MLc        */
                                         0x04,                                             /* T          */
                                         0x06,                                             /* L          */
                                         (FID_NDEF & 0xFF00) >> 8, (FID_NDEF & 0x00FF),    /* V1         */
