@@ -20,6 +20,7 @@
 
 /* Status Words */
 #define NFC_SW_OK                        0x9000U
+#define NFC_SW_CHAIN                     0x6100U
 #define NFC_SW_FILE_NOT_FOUND            0x6A82U
 #define NFC_SW_FUNC_NOT_SUPPORTED        0x6800U
 #define NFC_SW_WRONG_LENGTH              0x6700U
