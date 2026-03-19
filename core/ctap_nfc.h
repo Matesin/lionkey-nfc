@@ -14,25 +14,23 @@
 //TODO: Add doxygen
 
 /* Instruction byte values */
-#define NFC_INS_SELECT          0xA4
-#define NFC_INS_CTAP            0x10
-#define NFC_INS_DESELECT        0x12
+#define NFC_INS_SELECT          0xA4U
+#define NFC_INS_CTAP            0x10U
+#define NFC_INS_DESELECT        0x12U
 #define NFC_INS_GET_RESPONSE    0xC0U
 
-
-#define CTAP_MAKE_CREDENTIAL       0x01
-#define CTAP_GET_ASSERTION         0x02
-#define CTAP_GET_NEXT_ASSERTION    0x08
-#define CTAP_GET_INFO              0x04
-#define CTAP_GET_PIN               0x06
-#define CTAP_RESET                 0x07
-
+#define NFC_INS_CTAP_CONTROL       0x12U
 
 /* Class byte values */
 #define NFC_CLA_ISO         0x00
 #define NFC_CLA_CTAP        0x80
+
 #define NFC_PARSE_WRONG_SIZE 1U
 
+/* read 2 bytes in big endian format from a buffer and return a 2-byte number */
+static inline uint16_t read_16be(const uint8_t *buf){ return ((uint16_t)buf[0] << 8) | buf[1];}
+
+/* APDU structure (as per https://www.cardlogix.com/glossary/apdu-application-protocol-data-unit-smart-card/) */
 typedef struct {
     uint8_t  cla;           /* class */
     uint8_t  ins;           /* instruction */
