@@ -14,20 +14,23 @@
 //TODO: Add doxygen
 
 /* Instruction byte values */
-#define NFC_INS_SELECT          0xA4U
-#define NFC_INS_CTAP            0x10U
-#define NFC_INS_DESELECT        0x12U
-#define NFC_INS_GET_RESPONSE    0xC0U
+#define NFC_INS_SELECT                          0xA4U
+#define NFC_INS_CTAP                            0x10U
+#define NFC_INS_DESELECT                        0x12U
+#define NFC_INS_GET_RESPONSE                    0xC0U
 
-#define NFC_INS_CTAP_CONTROL       0x12U
+#define NFC_INS_CTAP_CONTROL                    0x12U
 
-#define NFC_USER_PRESENCE_TIMER_THRESHOLD_MS 12000U // 12 seconds
+#define NFC_USER_PRESENCE_TIMER_THRESHOLD_MS    12000U // 12 seconds
 
 /* Class byte values */
-#define NFC_CLA_ISO         0x00
-#define NFC_CLA_CTAP        0x80
+#define NFC_CLA_ISO                             0x00
+#define NFC_CLA_CTAP                            0x80
 
-#define NFC_PARSE_WRONG_SIZE 1U
+#define NFC_PARSE_WRONG_SIZE                    1U
+
+#define NFC_APDU_SHORT_MAX_LEN                  256U
+#define NFC_APDU_EXTENDED_MAX_LEN               65536U
 
 extern bool nfc_user_present;
 /* read 2 bytes in big endian format from a buffer and return a 2-byte number */
@@ -42,6 +45,9 @@ typedef struct {
     uint16_t lc;            /* data length */
     const uint8_t *data;    /* CTAP cmd + CBOR */
     uint16_t le;            /* exp resp len */
+
+    bool has_le;
+    bool extended;
 } nfc_apdu_t;
 
 typedef enum
