@@ -13,6 +13,8 @@ extern const ctap_crypto_t app_hw_crypto;
 extern ctaphid_state_t app_ctaphid;
 extern ctap_state_t app_ctap;
 
+extern bool nfc_user_present;
+
 noreturn void app_run(void);
 
 void app_hid_task(void);

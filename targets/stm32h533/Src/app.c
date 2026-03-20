@@ -70,21 +70,31 @@ static void app_ctaphid_send_keepalive(ctap_keepalive_status_t status) {
 
 static void app_ctap_send_keepalive_if_needed(ctap_keepalive_status_t current_status) {
 
-	// send immediately whenever the status changes
-	if (current_status != app_ctap_last_status) {
-		app_ctap_last_status = current_status;
-		app_ctaphid_send_keepalive(current_status);
-		return;
-	}
+	if (!nfc_user_present)
+	{
+		// send immediately whenever the status changes
+		if (current_status != app_ctap_last_status) {
+			app_ctap_last_status = current_status;
+			app_ctaphid_send_keepalive(current_status);
+			return;
+		}
 
-	// but at least every 100ms
-	uint32_t elapsed_since_last_keepalive = HAL_GetTick() - app_ctap_last_status_message_timestamp;
-	// use a smaller value here to guarantee that the keepalive messages are sent frequently enough
-	// even if ctap_send_keepalive_if_needed() is sometimes invoked late
-	if (elapsed_since_last_keepalive > 80) {
-		app_ctaphid_send_keepalive(current_status);
+		// but at least every 100ms
+		uint32_t elapsed_since_last_keepalive = HAL_GetTick() - app_ctap_last_status_message_timestamp;
+		// use a smaller value here to guarantee that the keepalive messages are sent frequently enough
+		// even if ctap_send_keepalive_if_needed() is sometimes invoked late
+		if (elapsed_since_last_keepalive > 80) {
+			app_ctaphid_send_keepalive(current_status);
+		}
 	}
-
+	else
+	{
+		if (nfc_is_user_presence_timer_expired()) {
+			nfc_user_present = false;
+			info_log(yellow("User presence timer expired, resetting user presence status") nl);
+			// app_ctap_reset_keepalive();
+		}
+	}
 }
 
 // This function might be invoked anytime by the CTAP layer while in ctap_request().
@@ -96,6 +106,11 @@ void ctap_send_keepalive_if_needed(ctap_keepalive_status_t current_status) {
 
 // This function might be invoked anytime by the CTAP layer while in ctap_request().
 ctap_user_presence_result_t ctap_wait_for_user_presence(void) {
+
+	if (nfc_user_present) {
+		info_log(yellow("User presence already confirmed by NFC, allowing without waiting for button press") nl);
+		return CTAP_UP_RESULT_ALLOW;
+	}
 
 	info_log(yellow("waiting for user presence (press the ") cyan("BLUE") yellow(" button) ...") nl);
 	app_ctap_send_keepalive_if_needed(CTAP_STATUS_UPNEEDED);

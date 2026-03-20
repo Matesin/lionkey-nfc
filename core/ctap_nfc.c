@@ -383,6 +383,8 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
             ctx->selected_file = FILE_NONE;
             ctx->chain_len     = 0U;   /* clear any stale chained response */
             debug_log(blue("NFC: FIDO AID selected") nl);
+            /* upon detecting user presence, start the 2-minute user presence timer (5.)*/
+            nfc_start_user_presence_timer();
             /* return FIDO version*/
             return nfc_build_response(FIDO_VERSION, sizeof(FIDO_VERSION), NFC_SW_OK, tx_buf, tx_buf_len);
         }

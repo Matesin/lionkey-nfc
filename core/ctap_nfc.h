@@ -21,12 +21,15 @@
 
 #define NFC_INS_CTAP_CONTROL       0x12U
 
+#define NFC_USER_PRESENCE_TIMER_THRESHOLD_MS 12000U // 12 seconds
+
 /* Class byte values */
 #define NFC_CLA_ISO         0x00
 #define NFC_CLA_CTAP        0x80
 
 #define NFC_PARSE_WRONG_SIZE 1U
 
+extern bool nfc_user_present;
 /* read 2 bytes in big endian format from a buffer and return a 2-byte number */
 static inline uint16_t read_16be(const uint8_t *buf){ return ((uint16_t)buf[0] << 8) | buf[1];}
 
