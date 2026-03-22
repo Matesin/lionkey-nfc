@@ -12,6 +12,7 @@
 #include "ctap_asn1.h"
 #include "ctap_pin_protocol.h"
 #include "ctap_credentials_store.h"
+#include "ctap_nfc.h"
 
 #include "compiler.h"
 
@@ -154,6 +155,8 @@ typedef struct ctap_state {
 	ctap_pin_uv_auth_token_state pin_uv_auth_token_state;
 
 	ctap_stateful_command_state_t stateful_command_state;
+
+	nfc_user_presence_timer_t nfc_timer;
 
 } ctap_state_t;
 
