@@ -4,6 +4,7 @@
 
 #include "nfc.h"
 
+#include "ctap.h"
 #include "ctap_nfc.h"
 #include "demo_ce.h"
 #include "main.h"
@@ -15,7 +16,8 @@
 #include "rfal_nfca.h"
 
 uint32_t nfc_user_presence_timer;
-bool nfc_user_present;
+
+extern ctap_state_t app_ctap;
 
 /* NFC-A CE config */
 /* 4-byte UIDs with first byte 0x08 would need random number for the subsequent 3 bytes.
@@ -160,6 +162,8 @@ void app_nfc_task(void)
         {
             init_context(&ce_ctx);
             select_state = NFC_CE_ACTIVE;
+            // Upon detecting RF field, start the NFC-powered timer
+            ctap_nfc_start_user_presence_timer(&app_ctap.nfc_timer);
         }
         break;
 
@@ -168,7 +172,11 @@ void app_nfc_task(void)
         {
             debug_log("NFC: session ended" nl);
             select_state = NFC_START_DISCOVERY;
+            //user not present, set the user presence flag to false
+            ctap_nfc_stop_user_presence_timer(&app_ctap.nfc_timer);
         }
+        //check the timer, toggle user presence value if expired
+        ctap_nfc_is_user_presence_timer_expired(&app_ctap.nfc_timer);
         break;
 
     case NFC_NOTINIT:
@@ -376,17 +384,11 @@ static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len)
 
 bool nfc_is_user_presence_timer_expired(void)
 {
-    const uint32_t current_time = HAL_GetTick();
-    if (current_time - nfc_user_presence_timer >= NFC_USER_PRESENCE_TIMER_THRESHOLD_MS) {
-        return true;
-    }
-    debug_log(red("CE: user presence timer expired") nl);
     return false;
-}
-
-void nfc_start_user_presence_timer(void)
-{
-    debug_log(cyan("CE: start user presence timer") nl);
-    nfc_user_present = true;
-    nfc_user_presence_timer = HAL_GetTick();
+    // const uint32_t current_time = HAL_GetTick();
+    // if (current_time - nfc_user_presence_timer >= NFC_USER_PRESENCE_TIMER_THRESHOLD_MS) {
+    //     debug_log(red("CE: user presence timer expired") nl);
+    //     return true;
+    // }
+    // return false;
 }

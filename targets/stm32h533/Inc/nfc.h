@@ -101,8 +101,4 @@ typedef struct
 /*! Funtion prototypes -------------------------------------------------------------*/
 void nfc_init(void);
 void app_nfc_task(void);
-bool nfc_is_user_presence_timer_expired(void);
-void nfc_start_user_presence_timer(void);
-
-
 #endif //LIONKEY_NFC_H
