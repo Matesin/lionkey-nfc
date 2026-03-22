@@ -381,14 +381,3 @@ static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len)
     ce_state = CE_STATE_WAIT_TX;
     return true;
 }
-
-bool nfc_is_user_presence_timer_expired(void)
-{
-    return false;
-    // const uint32_t current_time = HAL_GetTick();
-    // if (current_time - nfc_user_presence_timer >= NFC_USER_PRESENCE_TIMER_THRESHOLD_MS) {
-    //     debug_log(red("CE: user presence timer expired") nl);
-    //     return true;
-    // }
-    // return false;
-}
