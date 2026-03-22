@@ -9,6 +9,7 @@
 #include "flash_storage.h"
 #include "hw_crypto.h"
 #include "app_test.h"
+#include "ctap_nfc.h"
 #include "demo_ce.h"
 #include "nfc.h"
 #include "nfc_test.h"
@@ -70,7 +71,7 @@ static void app_ctaphid_send_keepalive(ctap_keepalive_status_t status) {
 
 static void app_ctap_send_keepalive_if_needed(ctap_keepalive_status_t current_status) {
 
-	if (!nfc_user_present)
+	if (!app_ctap.nfc_timer.nfc_user_present)
 	{
 		// send immediately whenever the status changes
 		if (current_status != app_ctap_last_status) {
@@ -90,9 +91,7 @@ static void app_ctap_send_keepalive_if_needed(ctap_keepalive_status_t current_st
 	else
 	{
 		if (nfc_is_user_presence_timer_expired()) {
-			nfc_user_present = false;
 			info_log(yellow("User presence timer expired, resetting user presence status") nl);
-			// app_ctap_reset_keepalive();
 		}
 	}
 }
@@ -107,8 +106,11 @@ void ctap_send_keepalive_if_needed(ctap_keepalive_status_t current_status) {
 // This function might be invoked anytime by the CTAP layer while in ctap_request().
 ctap_user_presence_result_t ctap_wait_for_user_presence(void) {
 
-	if (nfc_user_present) {
-		info_log(yellow("User presence already confirmed by NFC, allowing without waiting for button press") nl);
+	/* If the NFC userPresent flag's value is true,
+	* then consider the user as having granted permission,
+	* and set the NFC userPresent flag to false. */
+	if (app_ctap.nfc_timer.nfc_user_present) {
+		info_log(yellow("ctap_wait_for_user_presence: ") green("user presence already satisfied") nl);
 		return CTAP_UP_RESULT_ALLOW;
 	}
 
