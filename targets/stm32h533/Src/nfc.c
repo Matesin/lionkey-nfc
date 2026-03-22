@@ -8,7 +8,6 @@
 #include "ctap_nfc.h"
 #include "demo_ce.h"
 #include "main.h"
-#include "ndef_errno.h"
 #include "nfc_test.h"
 #include "rfal_nfc.h"
 #include "spi.h"

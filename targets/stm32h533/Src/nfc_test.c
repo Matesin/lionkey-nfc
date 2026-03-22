@@ -10,7 +10,6 @@
 #include "demo_ce.h"
 #include "utils.h"
 #include "main.h"
-#include "ndef_errno.h"
 #include "rfal_nfc.h"
 #include "spi.h"
 #include "rfal_platform.h"
@@ -235,7 +234,7 @@ static bool demoCE_task(void)
     rf_state = rfalNfcGetState();
     if (rf_state != prev_rf_state)
     {
-        debug_log("rf state: %d" nl, rf_state);
+        // debug_log("rf state: %d" nl, rf_state);
     }
     prev_rf_state = rf_state;
 

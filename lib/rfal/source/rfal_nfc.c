@@ -38,8 +38,6 @@
 #include "rfal_nfc.h"
 #include "rfal_utils.h"
 #include "rfal_analogConfig.h"
-#include "../../ndef/Inc/ndef_errno.h"
-
 
 /*
 ******************************************************************************
