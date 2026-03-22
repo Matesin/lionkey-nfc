@@ -73,6 +73,7 @@ typedef enum
 typedef struct
 {
     bool nfc_user_present;
+    bool nfc_ctap_in_use;
     uint32_t threshold;
     uint32_t begin_timestamp;
 } nfc_user_presence_timer_t;

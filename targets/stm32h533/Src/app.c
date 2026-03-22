@@ -71,7 +71,7 @@ static void app_ctaphid_send_keepalive(ctap_keepalive_status_t status) {
 
 static void app_ctap_send_keepalive_if_needed(ctap_keepalive_status_t current_status) {
 
-	if (!app_ctap.nfc_timer.nfc_user_present)
+	if (!app_ctap.nfc_timer.nfc_user_present && !app_ctap.nfc_timer.nfc_ctap_in_use)
 	{
 		// send immediately whenever the status changes
 		if (current_status != app_ctap_last_status) {

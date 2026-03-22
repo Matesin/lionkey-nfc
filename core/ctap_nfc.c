@@ -402,6 +402,7 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
             ctx->selected_file = FILE_NONE;
             ctx->chain_len     = 0U;   /* clear any stale chained response */
             debug_log(blue("NFC: FIDO AID selected") nl);
+            app_ctap.nfc_timer.nfc_ctap_in_use = true;
             /* return FIDO version*/
             return nfc_build_response(FIDO_VERSION, sizeof(FIDO_VERSION), NFC_SW_OK, tx_buf, tx_buf_len);
         }
@@ -501,5 +502,6 @@ bool ctap_nfc_is_user_presence_timer_expired(nfc_user_presence_timer_t* t)
 void ctap_nfc_stop_user_presence_timer(nfc_user_presence_timer_t* t)
 {
     debug_log(cyan("CE: stop user presence timer") nl);
+    t->nfc_ctap_in_use = false;
     t->nfc_user_present = false;
 }
