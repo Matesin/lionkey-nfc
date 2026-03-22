@@ -492,8 +492,6 @@ bool ctap_nfc_is_user_presence_timer_expired(nfc_user_presence_timer_t* t)
     const uint32_t current_time = ctap_get_current_time();
 
     if ((current_time - t->begin_timestamp) >= t->threshold) {
-        debug_log(red("CE: user presence timer expired") nl);
-        t->nfc_user_present = false;
         return true;
     }
     return false;

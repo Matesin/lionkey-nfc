@@ -90,8 +90,9 @@ static void app_ctap_send_keepalive_if_needed(ctap_keepalive_status_t current_st
 	}
 	else
 	{
-		if (ctap_nfc_is_user_presence_timer_expired(&app_ctap.nfc_timer)) {
+		if (ctap_nfc_is_user_presence_timer_expired(&app_ctap.nfc_timer) && app_ctap.nfc_timer.nfc_user_present) {
 			info_log(yellow("User presence timer expired, resetting user presence status") nl);
+			ctap_nfc_stop_user_presence_timer(&app_ctap.nfc_timer);
 		}
 	}
 }
