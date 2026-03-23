@@ -1,13 +1,3 @@
-#ifndef LIONKEY_CTAP_NFC_H
-#define LIONKEY_CTAP_NFC_H
-
-#pragma once
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-
-#include "nfc.h"
-
 /**
  * @file ctap_nfc.h
  *
@@ -19,7 +9,23 @@
  * based on the following document:
  * https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#nfc
  *
+ * Whenever there is an index associated with either a define, type or a prototype, it points to that respective
+ * part of the FIDO specification mentioned above. Otherwise, a link to a different specification is provided.
  */
+
+#ifndef LIONKEY_CTAP_NFC_H
+#define LIONKEY_CTAP_NFC_H
+
+/* INCLUDES */
+
+#pragma once
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+
+#include "nfc.h"
+
+/* GLOBAL DEFINES */
 
 /* Instruction byte values */
 #define NFC_INS_SELECT                          0xA4U
@@ -42,7 +48,9 @@
 
 extern bool nfc_user_present;
 
-/*
+/* GLOBAL TYPES */
+
+/*!
  * 5. (Evidence of User Interaction - NFC)
  * For authenticators without a method to collect  a user gesture
  * inside the authenticator boundary other than through a power on gesture,
@@ -55,11 +63,13 @@ extern bool nfc_user_present;
  */
 typedef struct
 {
-    bool nfc_user_present;
-    bool nfc_ctap_in_use;
-    uint32_t threshold;
-    uint32_t begin_timestamp;
+    bool nfc_user_present;      /*!< NFC User Present Flag (FIDO defined) */
+    bool nfc_ctap_in_use;       /*!< Flag indicating whether the CTAP session is currently active (i.e., whether we are currently processing a CTAP request) */
+    uint32_t threshold;         /*!< NFC User Presence Timer Threshold (in systicks) - defined upon startup */
+    uint32_t begin_timestamp;   /*!< NFC User Presence Timer Begin Timestamp (in systicks) - set when the timer is started */
 } nfc_user_presence_timer_t;
+
+/* GLOBAL FUNCTION PROTOTYPES */
 
 /**
  * @brief NFC Parse APDU
@@ -70,8 +80,9 @@ typedef struct
  * @param raw_len length of the raw APDU data
  * @param out [out] parsed APDU structure
  *
- * @return true if parsing was successful, false if the APDU format is invalid
- *
+ * @return APDU_PARSE_OK if parsing was successful
+ * @return APDU_ERR_TOO_SHORT if the length of the received message is less than 4
+ * @return APDU_ERR_MALFORMED otherwise
  */
 apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out);
 
@@ -82,6 +93,7 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
  *
  * @param buf [in/out] output buffer to write the 2-byte status word (SW1, SW2)
  * @param sw [in] status words to put (2 bytes)
+ *
  * @return length of the output (always 2 in this case for 2 bytes)
  */
 uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw );
@@ -97,6 +109,7 @@ uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw );
  * @param sw [in] status word (SW1, SW2) to append to the response
  * @param out [out] output buffer
  * @param out_size [in] size of the output buffer
+ *
  * @return length of the output (in bytes)
  */
 size_t nfc_build_response(const uint8_t *data, size_t data_len, uint16_t sw, uint8_t *out, size_t out_size);
@@ -112,6 +125,7 @@ size_t nfc_build_response(const uint8_t *data, size_t data_len, uint16_t sw, uin
  * @param rx_data_len length of the received data
  * @param tx_buf response buffer
  * @param tx_buf_len length of the response buffer
+ *
  * @return length of the response (in bytes)
  */
 uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx_data_len, uint8_t *tx_buf, uint16_t tx_buf_len );
