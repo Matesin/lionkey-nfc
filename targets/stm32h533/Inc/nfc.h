@@ -25,10 +25,13 @@
 #define T4T_INS_READ        0xB0                            /*!< INS value for reabbinary command                */
 #define T4T_INS_UPDATE      0xD6                            /*!< INS value for update command                    */
 
-#define FID_CC              0xE103    /*!< File ID number for CCFile                       */
-#define FID_NDEF            0x0001    /*!< File ID number for NDEF file                    */
+#define FID_CC              0xE103                          /*!< File ID number for CCFile                       */
+#define FID_NDEF            0x0001                          /*!< File ID number for NDEF file                    */
 
-#define APDU_WRONG_SIZE     1
+#define APDU_WRONG_SIZE     1U
+
+#define NFC_DEV_LIMIT       1U
+#define NFC_DISC_DUR        (60U * 1000U)                   /*!< Duration of the discovery phase (in ms)         */
 
 /*! Status Words -----------------------------------------------------*/
 #define NFC_SW_OK                        0x9000U            /*!< Success */
