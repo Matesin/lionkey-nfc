@@ -7,8 +7,14 @@
 #include "ctap.h"
 #include "utils.h"
 
+
 static const uint8_t FIDO_AID[]  = { 0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01 };
 static const uint8_t NDEF_AID[]  = { 0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01 };
+/*
+ * FIDO version to be returned upon FIDO_AID is received (11.3.3)
+ *
+ *  If the authenticator ONLY implements CTAP2, the device SHALL respond with "FIDO_2_0", or 0x4649444f5f325f30.
+ */
 static const uint8_t FIDO_VERSION[] = {'F', 'I', 'D', 'O', '_', '2', '_', '0'}; // FIDO_2_0
 
 extern ctap_state_t app_ctap;
@@ -208,7 +214,7 @@ static uint16_t fido_handle_get_response(t4t_context_t *ctx,
     /* no chain, return SW error */
     if (ctx->chain_len == 0U)
     {
-        return nfc_put_sw(tx_buf, NFC_SW_CONDITIONS);
+        return nfc_put_sw(tx_buf, NFC_SW_COND_NOT_SATISFIED);
     }
 
     /* if no length is defined, choose default */
@@ -369,8 +375,11 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
         return NFC_PARSE_WRONG_SIZE;
     }
 
+    /* parse APDU */
     err = nfc_parse_apdu(rx_data, rx_data_len, &apdu);
     debug_log(green("Err: %u")nl, err);
+
+    /* error while parsing */
     if (err != APDU_PARSE_OK) {
         debug_log(magenta("NFC ERROR: Invalid response buffer") nl);
         return nfc_put_sw(tx_buf, NFC_SW_WRONG_DATA);
@@ -430,6 +439,7 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
         return fido_handle_get_response(ctx, &apdu, tx_buf, tx_buf_len);
     }
 
+    /* Decide on action based on the currently selected applet */
     switch (ctx->selected_app)
     {
         case APP_FIDO:
@@ -487,7 +497,7 @@ void ctap_nfc_start_user_presence_timer(nfc_user_presence_timer_t* t)
     t->threshold = CTAP_MAX_USER_PRESENCE_TIME_LIMIT_NFC;
 }
 
-bool ctap_nfc_is_user_presence_timer_expired(nfc_user_presence_timer_t* t)
+bool ctap_nfc_is_user_presence_timer_expired(const nfc_user_presence_timer_t* t)
 {
     const uint32_t current_time = ctap_get_current_time();
 

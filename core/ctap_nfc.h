@@ -1,7 +1,3 @@
-//
-// Created by Maty Martan on 11.03.2026.
-//
-
 #ifndef LIONKEY_CTAP_NFC_H
 #define LIONKEY_CTAP_NFC_H
 
@@ -12,7 +8,18 @@
 
 #include "nfc.h"
 
-//TODO: Add doxygen
+/**
+ * @file ctap_nfc.h
+ *
+ * @author Maty Martan
+ *
+ * @brief Provides methods and structures for NFC application layer for the CTAP protocol
+ *
+ * @note This file is compliant with FIDO specifications and is implemented
+ * based on the following document:
+ * https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#nfc
+ *
+ */
 
 /* Instruction byte values */
 #define NFC_INS_SELECT                          0xA4U
@@ -21,6 +28,7 @@
 #define NFC_INS_GET_RESPONSE                    0xC0U
 #define NFC_INS_CTAP_CONTROL                    0x12U
 
+/* Maximal time of user presence (5.) */
 #define CTAP_MAX_USER_PRESENCE_TIME_LIMIT_NFC   (12U * 1000U) // 12s (in ms)
 
 /* Class byte values */
@@ -33,31 +41,6 @@
 #define NFC_APDU_EXTENDED_MAX_LEN               65536U
 
 extern bool nfc_user_present;
-
-/* APDU structure (as per https://www.cardlogix.com/glossary/apdu-application-protocol-data-unit-smart-card/) */
-typedef struct {
-    uint8_t  cla;           /* class */
-    uint8_t  ins;           /* instruction */
-    uint8_t  p1;            /* parameter 1 */
-    uint8_t  p2;            /* parameter 2 */
-    uint16_t lc;            /* data length */
-    const uint8_t *data;    /* CTAP cmd + CBOR */
-    uint16_t le;            /* exp resp len */
-    /* helper variables for apdu parsing and response chaining */
-    bool has_le;
-    bool extended;
-} nfc_apdu_t;
-
-/* APDU parsing status */
-typedef enum
-{
-    APDU_PARSE_OK = 0,
-    APDU_ERR_NULL,
-    APDU_ERR_TOO_SHORT,
-    APDU_ERR_MALFORMED,
-    APDU_ERR_UNSUPPORTED_CASE,
-    APDU_ERR_OTHER
-} apdu_parse_status_t;
 
 /*
  * 5. (Evidence of User Interaction - NFC)
@@ -79,7 +62,9 @@ typedef struct
 } nfc_user_presence_timer_t;
 
 /**
- * @brief Parses raw APDU bytes into the nfc_apdu_t structure
+ * @brief NFC Parse APDU
+ *
+ * Parses raw APDU bytes into the nfc_apdu_t structure
  *
  * @param raw APDU bytes received from the NFC reader
  * @param raw_len length of the raw APDU data
@@ -89,14 +74,23 @@ typedef struct
  *
  */
 apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out);
+
 /**
+ * @brief NFC Put SW
+ *
+ * Puts a status word into an output buffer in big-endian format (SW1, SW2)
  *
  * @param buf [in/out] output buffer to write the 2-byte status word (SW1, SW2)
  * @param sw [in] status words to put (2 bytes)
  * @return length of the output (always 2 in this case for 2 bytes)
  */
 uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw );
+
 /**
+ *
+ * @brief NFC Build Response
+ *
+ * Builds the final response to be sent via NFC
  *
  * @param data [in] data to write to the response buffer
  * @param data_len [in] length of the data to write
@@ -106,7 +100,12 @@ uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw );
  * @return length of the output (in bytes)
  */
 size_t nfc_build_response(const uint8_t *data, size_t data_len, uint16_t sw, uint8_t *out, size_t out_size);
+
 /**
+ *
+ * @brief NFC Parse And Respond
+ *
+ * Parses the received raw data from the input buffer and responds with the appropriate response based on the APDU command and the current state of the T4T context.
  *
  * @param ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
  * @param rx_data raw data received from the NFC
@@ -117,7 +116,35 @@ size_t nfc_build_response(const uint8_t *data, size_t data_len, uint16_t sw, uin
  */
 uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx_data_len, uint8_t *tx_buf, uint16_t tx_buf_len );
 
+/**
+ *
+ * @brief CTAP NFC Start User Presence Timer
+ *
+ * Starts the NFC user presence timer by setting the nfc_user_present flag to true and the timer's timestamp to the current time
+ *
+ * @param t pointer to the NFC user presence timer structure
+ */
 void ctap_nfc_start_user_presence_timer(nfc_user_presence_timer_t* t);
+
+/**
+ *
+ * @brief CTAP NFC Stop User Presence Timer
+ *
+ * Stops the NFC user presence timer by setting the nfc_user_present flag to false and nfc_ctap_in_use to false
+ *
+ * @param t pointer to the NFC user presence timer structure
+ */
 void ctap_nfc_stop_user_presence_timer(nfc_user_presence_timer_t* t);
-bool ctap_nfc_is_user_presence_timer_expired(nfc_user_presence_timer_t* t);
+
+/**
+ *
+ * @brief CTAP NFC Is User presence Timer Expired
+ *
+ * Checks if the NFC user presence timer has expired by comparing the current time with the begin_timestamp and the timer's threshold
+ *
+ * @param t pointer to the NFC user presence timer structure
+ * @return true if expired
+ * @return false if not expired
+ */
+bool ctap_nfc_is_user_presence_timer_expired(const nfc_user_presence_timer_t* t);
 #endif //LIONKEY_CTAP_NFC_H
