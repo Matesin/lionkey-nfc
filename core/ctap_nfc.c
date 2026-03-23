@@ -7,7 +7,6 @@
 #include "ctap.h"
 #include "utils.h"
 
-
 static const uint8_t FIDO_AID[]  = { 0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01 };
 static const uint8_t NDEF_AID[]  = { 0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01 };
 /*
@@ -28,6 +27,12 @@ static ctap_response_t nfc_ctap_response = {
 
 /* read 2 bytes in big endian format from a buffer and return a 2-byte number */
 static inline uint16_t read_16be(const uint8_t *buf){ return ((uint16_t)buf[0] << 8) | buf[1];}
+
+static uint16_t fido_handle_ctap(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
+static uint16_t fido_handle_ctap_get_response(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
+static uint16_t ndef_handle_select(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp);
+static uint16_t ndef_handle_read(const t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp, uint16_t rsp_len);
+static uint16_t ndef_handle_update(const t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf);
 
 apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out) {
     /* check for valid structure */
@@ -85,6 +90,7 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
             out->lc = b1;
             out->data = &raw[5];
             out->le = raw[5U + b1]; // Le = 0 stands for 256
+            out->has_le = true;
             return APDU_PARSE_OK;
         }
         debug_log(red("APDU parsing error: invalid short APDU length") nl);
@@ -207,7 +213,7 @@ static uint16_t fido_handle_ctap(t4t_context_t *ctx,
     return nfc_build_response(ctx->chain_buf, le, chain_sw, tx_buf, tx_buf_len);
 }
 
-static uint16_t fido_handle_get_response(t4t_context_t *ctx,
+static uint16_t fido_handle_ctap_get_response(t4t_context_t *ctx,
                                          const nfc_apdu_t *apdu,
                                          uint8_t *tx_buf, uint16_t tx_buf_len)
 {
@@ -436,7 +442,7 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
     /* Handle FIDO response */
     if ((apdu.cla == NFC_CLA_ISO) && (apdu.ins == NFC_INS_GET_RESPONSE))
     {
-        return fido_handle_get_response(ctx, &apdu, tx_buf, tx_buf_len);
+        return fido_handle_ctap_get_response(ctx, &apdu, tx_buf, tx_buf_len);
     }
 
     /* Decide on action based on the currently selected applet */
@@ -471,9 +477,13 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
 
 uint16_t nfc_put_sw(uint8_t *buf, uint16_t sw)
 {
+    if (buf == NULL)
+    {
+        return 0U;
+    }
     buf[0] = (uint8_t)(sw >> 8);
     buf[1] = (uint8_t)(sw & 0xFF);
-    return 2;
+    return 2U;
 }
 
 size_t nfc_build_response(
@@ -481,16 +491,30 @@ size_t nfc_build_response(
     uint16_t sw,
     uint8_t *out, size_t out_size
 ) {
-    if (out_size < data_len + 2) return 0;
-    if ((data != NULL) && (data_len > 0))
-        memmove(out, data, data_len);
-    out[data_len]     = (sw >> 8) & 0xFF;
-    out[data_len + 1] =  sw       & 0xFF;
-    return data_len + 2;
+    if ((out == NULL) || (data == NULL))
+    {
+        return 0U;
+    }
+
+    if (data_len > (out_size - 2U))
+    {
+        return 0U;
+    }
+    if (data_len > 0U)
+    {
+        (void)memmove(out, data, data_len);
+    }
+    out[data_len]     = (sw >> 8U) & 0xFF;
+    out[data_len + 1U] =  sw       & 0xFF;
+    return data_len + 2U;
 }
 
 void ctap_nfc_start_user_presence_timer(nfc_user_presence_timer_t* t)
 {
+    if (t == NULL) {
+        debug_log(red("NFC ERROR: Invalid timer structure") nl);
+        return;
+    }
     debug_log(cyan("CE: start user presence timer") nl);
     t->nfc_user_present = true;
     t->begin_timestamp = ctap_get_current_time();
@@ -499,6 +523,11 @@ void ctap_nfc_start_user_presence_timer(nfc_user_presence_timer_t* t)
 
 bool ctap_nfc_is_user_presence_timer_expired(const nfc_user_presence_timer_t* t)
 {
+    if (t == NULL) {
+        debug_log(red("NFC ERROR: Invalid timer structure") nl);
+        return true; // treat as expired if invalid
+    }
+
     const uint32_t current_time = ctap_get_current_time();
 
     if ((current_time - t->begin_timestamp) >= t->threshold) {
@@ -509,6 +538,11 @@ bool ctap_nfc_is_user_presence_timer_expired(const nfc_user_presence_timer_t* t)
 
 void ctap_nfc_stop_user_presence_timer(nfc_user_presence_timer_t* t)
 {
+    if (t == NULL)
+    {
+        debug_log(red("NFC ERROR: Invalid timer structure") nl);
+        return;
+    }
     debug_log(cyan("CE: stop user presence timer") nl);
     t->nfc_ctap_in_use = false;
     t->nfc_user_present = false;
