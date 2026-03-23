@@ -46,12 +46,6 @@
 #define NFC_SW_WRONG_DATA                0x6A80U            /*!< Wrong data (e.g., invalid command data) */
 #define NFC_SW_FILE_SELECTED             0x6A84U            /*!< File already selected (e.g., trying to select a file that's already selected) */
 
-/*! NFC states ------------------------------------------------------*/
-#define NFC_NOTINIT             0 /*! NFC state: not initialized */
-#define NFC_START_DISCOVERY     1 /*!< NFC state: start discovery */
-#define NFC_DISCOVERY           2 /*!< NFC state: discovery */
-#define NFC_CE_ACTIVE           3 /*!< NFC state: CE active */
-
 #define TX_BUF_SIZE             512
 
 /* GLOBAL DEFINES */
@@ -83,6 +77,15 @@ typedef enum
     CE_STATE_ERROR_RECOVERY     /*!< CE state: error recovery, e.g. after a failed transmission or reception */
 } ce_state_t;
 
+typedef enum
+{
+    NFC_NOTINIT = 0U,        /*! Not initialized */
+    NFC_START_DISCOVERY,     /*! Discovery started, waiting for a reader to come into range */
+    NFC_DISCOVERY,           /*! Discovery in progress, waiting for a reader to come into range */
+    NFC_CE_ACTIVE            /*! Card Emulation active, reader in range and can send APDU commands */
+} nfc_state_t;
+
+
 /*! Type 4 Tag Context struct */
 /*! Refer to https://docs.nordicsemi.com/bundle/ncs-3.0.2/page/nrfxlib/nfc/doc/type_4_tag.html for more details */
 typedef struct
@@ -107,6 +110,17 @@ typedef struct
     uint16_t chain_offset;                          /*!< CE context: offset in the chain buffer for the current response being built (for responses larger than Le) */
     uint16_t chain_len;                             /*!< CE context: remaining length of the response to be sent in the chain buffer (for responses larger than Le) */
 } t4t_context_t;
+
+typedef struct
+{
+    nfc_state_t state;
+    ce_state_t ce_state;
+    t4t_context_t ce_ctx;
+    uint8_t *rx_data;
+    uint16_t *rcv_len;
+    uint8_t tx_buf[TX_BUF_SIZE];
+    uint16_t tx_len;
+} nfc_runtime_t;
 
 /*! APDU structure (as per https://www.cardlogix.com/glossary/apdu-application-protocol-data-unit-smart-card/) */
 typedef struct {

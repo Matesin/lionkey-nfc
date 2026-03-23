@@ -7,10 +7,8 @@
 #include "ctap.h"
 #include "ctap_nfc.h"
 #include "demo_ce.h"
-#include "main.h"
 #include "nfc_test.h"
 #include "rfal_nfc.h"
-#include "spi.h"
 #include "utils.h"
 #include "rfal_nfca.h"
 
@@ -22,9 +20,9 @@ extern ctap_state_t app_ctap;
 /* 4-byte UIDs with first byte 0x08 would need random number for the subsequent 3 bytes.
  * 4-byte UIDs with first byte 0x*F are Fixed number, not unique
  * 7-byte UIDs need a manufacturer ID and need to assure uniqueness of the rest.*/
-static uint8_t NFCID[]     = {0x5F, 'L', 'N', 'K'};    /* =_LNK, 5F  4C  4E  4B NFCID1 / UID (4 bytes) - static value */
-static uint8_t SENS_RES[]  = {0x44, 0x00};             /* SENS_RES / ATQA for 4-byte UID            */
-static uint8_t SEL_RES     = 0x20U;                     /* SEL_RES / SAK */
+static const uint8_t NFCID[]     = {0x5F, 'L', 'N', 'K'};    /* =_LNK, 5F  4C  4E  4B NFCID1 / UID (4 bytes) - static value */
+static const uint8_t SENS_RES[]  = {0x44, 0x00};             /* SENS_RES / ATQA for 4-byte UID            */
+static const uint8_t SEL_RES     = 0x20U;                     /* SEL_RES / SAK */
 
 /**
   * Ver : Indicates the NDEF mapping version <BR>
@@ -36,7 +34,7 @@ static uint8_t SEL_RES     = 0x20U;                     /* SEL_RES / SAK */
   * Ln : Is the size of the actual stored NDEF data in bytes <BR>
   * Checksum : allows the Reader/Writer to check whether the Attribute Data are correct <BR>
   */
-static uint8_t InformationBlock[] = {   0x00, 0x0F,                                       /* CCLEN      */
+static const uint8_t InformationBlock[] = {   0x00, 0x0F,                                       /* CCLEN      */
                                         0x20,                                             /* T4T_VNo    */
                                         0x10, 0x00,                                       /* MLe        */
                                         0x10, 0x00,                                       /* MLc        */
@@ -50,14 +48,22 @@ static uint8_t InformationBlock[] = {   0x00, 0x0F,                             
 
 
 static uint8_t        ndefFile[] = {    0x00, 0x10, 0xD1, 0x01, 0x0C, 0x55, 0x01, 0x6C, 0x69, 0x6F, 0x6E, 0x6B, 0x65, 0x79, 0x2E, 0x64, 0x65, 0x76 };
+
+static nfc_runtime_t nfc_runtime =
+{
+    .state = NFC_DISCOVERY,
+    .ce_state = CE_STATE_IDLE,
+    .rx_data = NULL,
+    .rcv_len = NULL,
+    .tx_len = 0U
+};
+
 static rfalNfcDiscoverParam discParam;
 
-static rfalNfcState prev_rf_state = -1;
+static rfalNfcState prev_rf_state = RFAL_NFC_STATE_IDLE;
+static bool prev_rf_state_valid = false;
 
 static ce_state_t ce_state = CE_STATE_IDLE;
-
-static uint8_t select_state = NFC_DISCOVERY;
-static t4t_context_t ce_ctx;
 
 static uint8_t  *rx_data  = NULL;
 static uint16_t *rcv_len  = NULL;
@@ -81,7 +87,7 @@ void nfc_init(void)
     #ifdef NFC_DEMO_CE
     demoCeInit(NULL);
     #else
-    init_context(&ce_ctx);
+    init_context(&nfc_runtime.ce_ctx);
     #endif
     // run_nfc_tests();
     debug_log("NFC initialized" nl);
@@ -120,7 +126,7 @@ static bool nfc_init_params(void)
 static void nfc_notify(rfalNfcState st)
 {
     // don't log state unless it has changed
-    if (prev_rf_state == st) {
+    if ((prev_rf_state_valid == true) && prev_rf_state == st) {
         return;
     }
     switch(st)
@@ -139,6 +145,7 @@ static void nfc_notify(rfalNfcState st)
             break;
     }
     prev_rf_state = st;
+    prev_rf_state_valid = true;
 }
 
 void app_nfc_task(void)
@@ -149,18 +156,18 @@ void app_nfc_task(void)
 
     rfalNfcWorker();
 
-    switch (select_state)
+    switch (nfc_runtime.state)
     {
     case NFC_START_DISCOVERY:
-        init_context(&ce_ctx); // reinitialise the context
-        select_state = NFC_DISCOVERY;
+        init_context(&nfc_runtime.ce_ctx); // reinitialise the context
+        nfc_runtime.state = NFC_DISCOVERY;
         break;
 
     case NFC_DISCOVERY:
         if (rfalNfcIsDevActivated(rfalNfcGetState()))
         {
-            init_context(&ce_ctx);
-            select_state = NFC_CE_ACTIVE;
+            init_context(&nfc_runtime.ce_ctx);
+            nfc_runtime.state = NFC_CE_ACTIVE;
             // Upon detecting RF field, start the NFC-powered timer
             ctap_nfc_start_user_presence_timer(&app_ctap.nfc_timer);
         }
@@ -170,7 +177,7 @@ void app_nfc_task(void)
         if (nfc_ce_task())
         {
             debug_log("NFC: session ended" nl);
-            select_state = NFC_START_DISCOVERY;
+            nfc_runtime.state = NFC_START_DISCOVERY;
             //user not present, set the user presence flag to false
             ctap_nfc_stop_user_presence_timer(&app_ctap.nfc_timer);
         }
@@ -193,7 +200,7 @@ static bool nfc_ce_task(void)
     {
     case RFAL_NFC_STATE_START_DISCOVERY:
         /* Reinitialize context for a new session */
-        init_context(&ce_ctx); 
+        init_context(&nfc_runtime.ce_ctx); 
         return true;
         
     case RFAL_NFC_STATE_ACTIVATED:
@@ -233,7 +240,7 @@ static bool nfc_ce_task(void)
 
             if (err != RFAL_ERR_NONE)
             {
-                debug_log("CE RX failed: %d" nl, err);
+                debug_log(red("ERROR: CE: RX failed: %d") nl, err);
                 ce_state = CE_STATE_ERROR_RECOVERY;
                 rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
                 return false;
@@ -241,7 +248,7 @@ static bool nfc_ce_task(void)
 
             if ((rx_data == NULL) || (rcv_len == NULL))
             {
-                debug_log("CE RX pointers invalid" nl);
+                debug_log(red("ERROR: CE RX pointers invalid") nl);
                 ce_state = CE_STATE_ERROR_RECOVERY;
                 rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
                 return false;
@@ -260,10 +267,11 @@ static bool nfc_ce_task(void)
             return false;
 
         case CE_STATE_PROCESS_RX:
-            tx_len = nfc_parse_and_respond(&ce_ctx, rx_data, *rcv_len, tx_buf, sizeof(tx_buf));
+            tx_len = nfc_parse_and_respond(&nfc_runtime.ce_ctx, rx_data, *rcv_len, tx_buf, sizeof(tx_buf));
 
-            if (tx_len == NFC_PARSE_WRONG_SIZE)
+            if ((tx_len == NFC_PARSE_WRONG_SIZE) || (tx_len == 0))
             {
+                debug_log(red("ERROR: CE: APDU response invalid") nl);
                 ce_state = CE_STATE_ERROR_RECOVERY;
                 rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
                 return false;
