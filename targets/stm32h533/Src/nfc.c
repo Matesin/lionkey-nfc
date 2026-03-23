@@ -1,7 +1,3 @@
-//
-// Created by Maty Martan on 11.01.2026.
-//
-
 #include "nfc.h"
 
 #include "ctap.h"
@@ -11,8 +7,6 @@
 #include "rfal_nfc.h"
 #include "utils.h"
 #include "rfal_nfca.h"
-
-uint32_t nfc_user_presence_timer;
 
 extern ctap_state_t app_ctap;
 
@@ -74,7 +68,8 @@ static bool nfc_handle_wait_tx(void);
 static bool nfc_handle_process_rx(void);
 static void nfc_enter_error_recovery(const char* msg, ErrorStatus err);
 static void nfc_log_received_apdu(uint8_t* apdu, uint16_t apdu_len);
-static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len);
+static void nfc_log_sent_apdu(uint8_t* apdu, uint16_t apdu_len);
+static bool nfc_poll_transmission_status(transmission_line_t line);
 
 void nfc_init(void)
 {
@@ -100,7 +95,7 @@ static bool nfc_init_params(void)
     {
         rfalNfcDefaultDiscParams( &discParam );
 
-        discParam.devLimit      = NFC_DEV_LIMIT;
+        discParam.devLimit             = NFC_DEV_LIMIT;
 
         discParam.notifyCb             = nfc_notify;
         discParam.totalDuration        = NFC_DISC_DUR;
@@ -108,10 +103,10 @@ static bool nfc_init_params(void)
         /* Set configuration for NFC-A CE */
         (void) memcpy( discParam.lmConfigPA.SENS_RES, SENS_RES, RFAL_LM_SENS_RES_LEN );     /* Set SENS_RES / ATQA */
         (void) memcpy( discParam.lmConfigPA.nfcid, NFCID, RFAL_LM_NFCID_LEN_04 );           /* Set NFCID / UID */
-        discParam.lmConfigPA.nfcidLen = RFAL_LM_NFCID_LEN_04;/* Set NFCID length to 4 bytes */
-        discParam.lmConfigPA.SEL_RES  = SEL_RES;                                     /* Set SEL_RES / SAK */
+        discParam.lmConfigPA.nfcidLen = RFAL_LM_NFCID_LEN_04;                               /* Set NFCID length to 4 bytes */
+        discParam.lmConfigPA.SEL_RES  = SEL_RES;                                            /* Set SEL_RES / SAK */
 
-        discParam.isoDepFS = RFAL_ISODEP_FSXI_256;                                    /* Set ISO-DEP Frame Size to 256 bytes */
+        discParam.isoDepFS = RFAL_ISODEP_FSXI_256;                                          /* Set ISO-DEP Frame Size to 256 bytes */
         discParam.nfcDepLR = RFAL_NFCDEP_LR_254;
 
         discParam.techs2Find = RFAL_NFC_LISTEN_TECH_A;
@@ -150,9 +145,7 @@ static void nfc_notify(rfalNfcState st)
 
 void app_nfc_task(void)
 {
-    #ifdef NFC_DEMO_CE
-        demoTask();
-    #else
+    #ifndef NFC_DEMO_CE
 
     rfalNfcWorker();
 
@@ -189,7 +182,10 @@ void app_nfc_task(void)
     default:
         break;
     }
-#endif
+
+    #else
+    demoTask();
+    #endif
 }
 
 static bool nfc_ce_task(void)
@@ -241,25 +237,7 @@ static bool nfc_ce_task(void)
 static bool nfc_handle_wait_rx(void)
 {
 
-    const ReturnCode err = rfalNfcDataExchangeGetStatus();
-
-    if (err == RFAL_ERR_BUSY)
-    {
-        return false;
-    }
-
-    if (err == RFAL_ERR_SLEEP_REQ)
-    {
-        debug_log("CE: peer requested sleep" nl);
-        nfc_runtime.ce_state = CE_STATE_IDLE;
-        return false;
-    }
-
-    if (err != RFAL_ERR_NONE)
-    {
-        nfc_enter_error_recovery("RX failed", err);
-        return false;
-    }
+    nfc_poll_transmission_status(RX);
 
     if ((nfc_runtime.rx_data == NULL) || (nfc_runtime.rcv_len == NULL))
     {
@@ -282,7 +260,11 @@ static bool nfc_handle_wait_rx(void)
 
 static bool nfc_handle_process_rx(void)
 {
-    nfc_runtime.tx_len = nfc_parse_and_respond(&nfc_runtime.ce_ctx, nfc_runtime.rx_data, *nfc_runtime.rcv_len, nfc_runtime.tx_buf, sizeof(nfc_runtime.tx_buf));
+    nfc_runtime.tx_len = nfc_parse_and_respond(&nfc_runtime.ce_ctx,
+                                                nfc_runtime.rx_data,
+                                                *nfc_runtime.rcv_len,
+                                                nfc_runtime.tx_buf,
+                                                sizeof(nfc_runtime.tx_buf));
 
     if ((nfc_runtime.tx_len == NFC_PARSE_WRONG_SIZE) || (nfc_runtime.tx_len == 0))
     {
@@ -302,23 +284,9 @@ static bool nfc_handle_process_rx(void)
 
 static bool nfc_handle_wait_tx(void)
 {
-    const ReturnCode err = rfalNfcDataExchangeGetStatus();
 
-    if (err == RFAL_ERR_BUSY)
+    if (!nfc_poll_transmission_status(TX))
     {
-        return false;
-    }
-
-    if (err == RFAL_ERR_SLEEP_REQ)
-    {
-        debug_log("CE: sleep requested after TX" nl);
-        nfc_runtime.ce_state = CE_STATE_IDLE;
-        return false;
-    }
-
-    if (err != RFAL_ERR_NONE)
-    {
-        nfc_enter_error_recovery("TX failed", err);
         return false;
     }
 
@@ -329,10 +297,7 @@ static bool nfc_handle_wait_tx(void)
     }
     else
     {
-        /*
-         * Exchange completed but no next APDU is available.
-         * Re-arm the first receive path.
-         */
+        /* Exchange completed but no next APDU is available, re-arm the first receive path.*/
         nfc_runtime.ce_state = CE_STATE_IDLE;
         nfc_start_rx();
     }
@@ -397,6 +362,31 @@ static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len)
     }
     debug_log("CE: start TX successful" nl);
     nfc_runtime.ce_state = CE_STATE_WAIT_TX;
+    return true;
+}
+
+static bool nfc_poll_transmission_status(transmission_line_t line)
+{
+    const ReturnCode err = rfalNfcDataExchangeGetStatus();
+
+    if (err == RFAL_ERR_BUSY)
+    {
+        return false;
+    }
+
+    if (err == RFAL_ERR_SLEEP_REQ)
+    {
+        debug_log("CE: sleep requested after TX" nl);
+        nfc_runtime.ce_state = CE_STATE_IDLE;
+        return false;
+    }
+
+    if (err != RFAL_ERR_NONE)
+    {
+        line == TX ? nfc_enter_error_recovery("TX failed", err) : nfc_enter_error_recovery("RX failed", err);
+        return false;
+    }
+
     return true;
 }
 

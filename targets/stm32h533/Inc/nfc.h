@@ -88,6 +88,22 @@ typedef enum
     NFC_CE_ACTIVE            /*! Card Emulation active, reader in range and can send APDU commands */
 } nfc_state_t;
 
+/*! APDU parsing status */
+typedef enum
+{
+    APDU_PARSE_OK = 0,
+    APDU_ERR_NULL,
+    APDU_ERR_TOO_SHORT,
+    APDU_ERR_MALFORMED,
+    APDU_ERR_UNSUPPORTED_CASE,
+    APDU_ERR_OTHER
+} apdu_parse_status_t;
+
+typedef enum
+{
+    RX,
+    TX
+} transmission_line_t;
 
 /*! Type 4 Tag Context struct */
 /*! Refer to https://docs.nordicsemi.com/bundle/ncs-3.0.2/page/nrfxlib/nfc/doc/type_4_tag.html for more details */
@@ -138,17 +154,6 @@ typedef struct {
     bool has_le;            /* flag indicating whether the APDU has an Le field (i.e., is case 2 or 4) */
     bool extended;          /* flag indicating whether the APDU is an extended APDU (i.e., has 3-byte Lc and Le fields) */
 } nfc_apdu_t;
-
-/*! APDU parsing status */
-typedef enum
-{
-    APDU_PARSE_OK = 0,
-    APDU_ERR_NULL,
-    APDU_ERR_TOO_SHORT,
-    APDU_ERR_MALFORMED,
-    APDU_ERR_UNSUPPORTED_CASE,
-    APDU_ERR_OTHER
-} apdu_parse_status_t;
 
 /* FUNCTION PROTOTYPES */
 /**
