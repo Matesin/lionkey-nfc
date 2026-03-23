@@ -377,7 +377,7 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
     apdu_parse_status_t err;
 
     if ((ctx == NULL) || (tx_buf == NULL) || (tx_buf_len < 2U)) {
-        debug_log(red("NFC ERROR: Invalid response buffer") nl);
+        error_log(red("NFC: ERROR: Invalid response buffer") nl);
         return NFC_PARSE_WRONG_SIZE;
     }
 
@@ -387,7 +387,7 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
 
     /* error while parsing */
     if (err != APDU_PARSE_OK) {
-        debug_log(magenta("NFC ERROR: Invalid response buffer") nl);
+        error_log(magenta("NFC: ERROR: Invalid response buffer") nl);
         return nfc_put_sw(tx_buf, NFC_SW_WRONG_DATA);
     }
 
@@ -512,7 +512,7 @@ size_t nfc_build_response(
 void ctap_nfc_start_user_presence_timer(nfc_user_presence_timer_t* t)
 {
     if (t == NULL) {
-        debug_log(red("NFC ERROR: Invalid timer structure") nl);
+        error_log(red("NFC: ERROR: Invalid timer structure") nl);
         return;
     }
     debug_log(cyan("CE: start user presence timer") nl);
@@ -524,7 +524,7 @@ void ctap_nfc_start_user_presence_timer(nfc_user_presence_timer_t* t)
 bool ctap_nfc_is_user_presence_timer_expired(const nfc_user_presence_timer_t* t)
 {
     if (t == NULL) {
-        debug_log(red("NFC ERROR: Invalid timer structure") nl);
+        error_log(red("NFC: ERROR: Invalid timer structure") nl);
         return true; // treat as expired if invalid
     }
 
@@ -540,7 +540,7 @@ void ctap_nfc_stop_user_presence_timer(nfc_user_presence_timer_t* t)
 {
     if (t == NULL)
     {
-        debug_log(red("NFC ERROR: Invalid timer structure") nl);
+        error_log(red("NFC: ERROR: Invalid timer structure") nl);
         return;
     }
     debug_log(cyan("CE: stop user presence timer") nl);

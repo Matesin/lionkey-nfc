@@ -297,7 +297,7 @@ static bool nfc_handle_wait_tx(void)
     }
     else
     {
-        /* Exchange completed but no next APDU is available, re-arm the first receive path.*/
+        /* Exchange completed but no next APDU is available, re-arm the first receive path. */
         nfc_runtime.ce_state = CE_STATE_IDLE;
         nfc_start_rx();
     }
@@ -336,7 +336,7 @@ static bool nfc_start_rx(void)
     const ReturnCode err = rfalNfcDataExchangeStart(NULL, 0, &nfc_runtime.rx_data, &nfc_runtime.rcv_len, RFAL_FWT_NONE);
     if (err != RFAL_ERR_NONE)
     {
-        debug_log(red("ERROR: CE: start RX failed: %d") nl, err);
+        error_log(red("ERROR: CE: start RX failed: %d") nl, err);
         nfc_runtime.ce_state = CE_STATE_ERROR_RECOVERY;
         return false;
     }
@@ -349,7 +349,7 @@ static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len)
 {
     if (tx_data == NULL)
     {
-        debug_log(red("ERROR: CE: nfc_start_tx called with NULL data") nl);
+        error_log(red("ERROR: CE: nfc_start_tx called with NULL data") nl);
         return false;
     }
 
@@ -392,7 +392,7 @@ static bool nfc_poll_transmission_status(transmission_line_t line)
 
 static void nfc_enter_error_recovery(const char* msg, const ErrorStatus err)
 {
-    debug_log(red("ERROR: CE: %s (%d)") nl, msg, err);
+    error_log(red("ERROR: CE: %s (%d)") nl, msg, err);
     nfc_runtime.ce_state = CE_STATE_ERROR_RECOVERY;
     (void) rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
 }
@@ -401,7 +401,7 @@ static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
 {
     if (apdu == NULL)
     {
-        debug_log(red("ERROR: CE: apdu received is NULL" nl));
+        error_log(red("ERROR: CE: apdu received is NULL" nl));
         return;
     }
     debug_log("Received APDU (%u bytes): %s" nl, apdu_len, hex2Str(apdu, apdu_len));
@@ -411,7 +411,7 @@ static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
 {
     if (apdu == NULL)
     {
-        debug_log(red("ERROR: CE: apdu sent is NULL" nl));
+        error_log(red("ERROR: CE: apdu sent is NULL" nl));
         return;
     }
     debug_log("Sent APDU (%u bytes): %s" nl, apdu_len, hex2Str(apdu, apdu_len));
