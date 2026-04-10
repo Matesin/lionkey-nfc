@@ -82,23 +82,23 @@ typedef enum
 
 typedef enum
 {
-    NFC_NOTINIT = 0U,        /*! Not initialized */
-    NFC_START_DISCOVERY,     /*! Discovery started, waiting for a reader to come into range */
-    NFC_DISCOVERY,           /*! Discovery in progress, waiting for a reader to come into range */
-    NFC_CE_ACTIVE            /*! Card Emulation active, reader in range and can send APDU commands */
+    NFC_NOTINIT = 0U,           /*! Not initialized */
+    NFC_START_DISCOVERY,        /*! Discovery started, waiting for a reader to come into range */
+    NFC_DISCOVERY,              /*! Discovery in progress, waiting for a reader to come into range */
+    NFC_CE_ACTIVE               /*! Card Emulation active, reader in range and can send APDU commands */
 } nfc_state_t;
 
 /*! APDU parsing status */
 typedef enum
 {
-    APDU_PARSE_OK = 0,
-    APDU_ERR_NULL,
-    APDU_ERR_TOO_SHORT,
-    APDU_ERR_MALFORMED,
-    APDU_ERR_UNSUPPORTED_CASE,
-    APDU_ERR_OTHER
+    APDU_PARSE_OK = 0,          /*! APDU parsed successfully */
+    APDU_ERR_NULL,              /*! APDU parsing error: null pointer provided as input */
+    APDU_ERR_TOO_SHORT,         /*! APDU parsing error: length of the received message is less than 4 bytes (i.e., missing mandatory header fields) */
+    APDU_ERR_MALFORMED,         /*! APDU parsing error: APDU structure is malformed (e.g., Lc or Le fields do not match the actual length of the data, or the APDU is too long) */
+    APDU_ERR_OTHER              /*! APDU parsing error: other errors */
 } apdu_parse_status_t;
 
+/*! SPI line identifier */
 typedef enum
 {
     RX,
@@ -130,6 +130,7 @@ typedef struct
     uint16_t chain_len;                             /*!< CE context: remaining length of the response to be sent in the chain buffer (for responses larger than Le) */
 } t4t_context_t;
 
+/*! Runtime struct to hold the state of the NFC peripheral and its context */
 typedef struct
 {
     nfc_state_t state;

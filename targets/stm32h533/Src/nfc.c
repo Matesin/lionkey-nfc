@@ -58,8 +58,8 @@ static rfalNfcState prev_rf_state = RFAL_NFC_STATE_IDLE;
 static bool prev_rf_state_valid = false;
 
 static bool nfc_init_params(void);
-static void nfc_notify(rfalNfcState st);
 static void nfc_init_session(void);
+static void nfc_notify(rfalNfcState st);
 static bool nfc_ce_task(void);
 static bool nfc_start_rx(void);
 static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len);
@@ -116,6 +116,30 @@ static bool nfc_init_params(void)
         return (err == RFAL_ERR_NONE);
     }
     return false;
+}
+
+static void nfc_init_session(void)
+{
+    t4t_context_t *ctx = &nfc_runtime.ce_ctx;
+    ctx->selected_file = FILE_NONE;
+
+    ctx->selected_app = APP_NONE;
+
+    ctx->cc_file = InformationBlock;
+    ctx->cc_file_len = sizeof(InformationBlock);
+
+    ctx->ndef_file = ndefFile;
+    ctx->ndef_file_len = sizeof(ndefFile);
+
+    ctx->fid_cc = FID_CC;
+    ctx->fid_ndef = FID_NDEF;
+    ctx->ndef_write_allowed = true;
+
+    nfc_runtime.ce_state = CE_STATE_IDLE;
+    /* reset transaction state */
+    nfc_runtime.rx_data = NULL;
+    nfc_runtime.rcv_len = NULL;
+    nfc_runtime.tx_len = 0;
 }
 
 static void nfc_notify(rfalNfcState st)
@@ -304,42 +328,21 @@ static bool nfc_handle_wait_tx(void)
     return false;
 }
 
-static void nfc_init_session(void)
-{
-    t4t_context_t *ctx = &nfc_runtime.ce_ctx;
-    ctx->selected_file = FILE_NONE;
-
-    ctx->selected_app = APP_NONE;
-
-    ctx->cc_file = InformationBlock;
-    ctx->cc_file_len = sizeof(InformationBlock);
-
-    ctx->ndef_file = ndefFile;
-    ctx->ndef_file_len = sizeof(ndefFile);
-
-    ctx->fid_cc = FID_CC;
-    ctx->fid_ndef = FID_NDEF;
-    ctx->ndef_write_allowed = true;
-
-    nfc_runtime.ce_state = CE_STATE_IDLE;
-    /* reset transaction state */
-    nfc_runtime.rx_data = NULL;
-    nfc_runtime.rcv_len = NULL;
-    nfc_runtime.tx_len = 0;
-}
-
 static bool nfc_start_rx(void)
 {
     nfc_runtime.rx_data = NULL;
     nfc_runtime.rcv_len = NULL;
+
     /* Receive the command from the reader */
     const ReturnCode err = rfalNfcDataExchangeStart(NULL, 0, &nfc_runtime.rx_data, &nfc_runtime.rcv_len, RFAL_FWT_NONE);
+
     if (err != RFAL_ERR_NONE)
     {
         error_log(red("ERROR: CE: start RX failed: %d") nl, err);
         nfc_runtime.ce_state = CE_STATE_ERROR_RECOVERY;
         return false;
     }
+
     debug_log("CE: start RX successful" nl);
     nfc_runtime.ce_state = CE_STATE_WAIT_RX;
     return true;
@@ -354,14 +357,17 @@ static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len)
     }
 
     const ReturnCode err = rfalNfcDataExchangeStart(tx_data, tx_data_len, &nfc_runtime.rx_data, &nfc_runtime.rcv_len, RFAL_FWT_NONE);
+
     if (err != RFAL_ERR_NONE)
     {
         debug_log("CE start TX failed: %d" nl, err);
         nfc_runtime.ce_state = CE_STATE_ERROR_RECOVERY;
         return false;
     }
+
     debug_log("CE: start TX successful" nl);
     nfc_runtime.ce_state = CE_STATE_WAIT_TX;
+
     return true;
 }
 
@@ -393,6 +399,7 @@ static bool nfc_poll_transmission_status(transmission_line_t line)
 static void nfc_enter_error_recovery(const char* msg, const ErrorStatus err)
 {
     error_log(red("ERROR: CE: %s (%d)") nl, msg, err);
+
     nfc_runtime.ce_state = CE_STATE_ERROR_RECOVERY;
     (void) rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
 }
