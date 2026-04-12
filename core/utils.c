@@ -3,7 +3,7 @@
 #if LIONKEY_DEBUG_LEVEL > 2
 
 #define MAX_HEX_STR         4
-#define MAX_HEX_STR_LENGTH  128
+#define MAX_HEX_STR_LENGTH  512
 uint8_t hexStrIdx = 0;
 char hexStr[MAX_HEX_STR][MAX_HEX_STR_LENGTH];
 
