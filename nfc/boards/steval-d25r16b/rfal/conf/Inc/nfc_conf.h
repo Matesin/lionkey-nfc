@@ -33,9 +33,6 @@ extern "C" {
 #ifndef LIONKEY_NFC_CONF_H
 #define LIONKEY_NFC_CONF_H
 
-/* RFAL NFC buffer length used by the NFC layer (bytes) */
-#define RFAL_FEATURE_NFC_RF_BUF_LEN             258U       /*!< RF buffer length used by RFAL NFC layer */
-
 #define NFC_SPI_TIMEOUT                         100U
 
 /* External peripheral handles (declare defined elsewhere in the project) */
