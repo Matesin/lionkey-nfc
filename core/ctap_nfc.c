@@ -383,7 +383,10 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
 
     /* parse APDU */
     err = nfc_parse_apdu(rx_data, rx_data_len, &apdu);
-    debug_log(green("Err: %u")nl, err);
+    if (err != APDU_PARSE_OK)
+    {
+        error_log(red("NFC: ERROR: Failed to parse APDU (Error code: %u)") nl, err);
+    } else debug_log(green("NFC: APDU parsed successfully") nl);
 
     /* error while parsing */
     if (err != APDU_PARSE_OK) {
