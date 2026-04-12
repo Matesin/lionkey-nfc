@@ -49,7 +49,7 @@
 #define NFC_SW_WRONG_DATA                0x6A80U            /*!< Wrong data (e.g., invalid command data) */
 #define NFC_SW_FILE_SELECTED             0x6A84U            /*!< File already selected (e.g., trying to select a file that's already selected) */
 
-#define TX_BUF_SIZE             512
+#define TX_BUF_SIZE                      512
 
 /* GLOBAL DEFINES */
 /*! Enums ------------------------------------------------------------*/

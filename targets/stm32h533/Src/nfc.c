@@ -28,17 +28,17 @@ static const uint8_t SEL_RES     = 0x20U;                     /* SEL_RES / SAK *
   * Ln : Is the size of the actual stored NDEF data in bytes <BR>
   * Checksum : allows the Reader/Writer to check whether the Attribute Data are correct <BR>
   */
-static const uint8_t InformationBlock[] = {   0x00, 0x0F,                                       /* CCLEN      */
-                                        0x20,                                             /* T4T_VNo    */
-                                        0x10, 0x00,                                       /* MLe        */
-                                        0x10, 0x00,                                       /* MLc        */
-                                        0x04,                                             /* T          */
-                                        0x06,                                             /* L          */
-                                        (FID_NDEF & 0xFF00) >> 8, (FID_NDEF & 0x00FF),    /* V1         */
-                                        (NDEF_SIZE & 0xFF00) >> 8, (NDEF_SIZE & 0x00FF),  /* V2         */
-                                        0x00,                                             /* V3         */
-                                        0x00                                              /* V4         */
-                                    };
+    static const uint8_t InformationBlock[] = { 0x00, 0x0F,                                       /* CCLEN      */
+                                                0x20,                                             /* T4T_VNo    */
+                                                0x10, 0x00,                                       /* MLe        */
+                                                0x10, 0x00,                                       /* MLc        */
+                                                0x04,                                             /* T          */
+                                                0x06,                                             /* L          */
+                                                (FID_NDEF & 0xFF00) >> 8, (FID_NDEF & 0x00FF),    /* V1         */
+                                                (NDEF_SIZE & 0xFF00) >> 8, (NDEF_SIZE & 0x00FF),  /* V2         */
+                                                0x00,                                             /* V3         */
+                                                0x00                                              /* V4         */
+                                              };
 
 
 static uint8_t        ndefFile[] = {    0x00, 0x10, 0xD1, 0x01, 0x0C, 0x55, 0x01, 0x6C, 0x69, 0x6F, 0x6E, 0x6B, 0x65, 0x79, 0x2E, 0x64, 0x65, 0x76 };
@@ -220,7 +220,7 @@ static bool nfc_ce_task(void)
         /* Reinitialize context for a new session */
         nfc_init_session();
         return true;
-        
+
     case RFAL_NFC_STATE_ACTIVATED:
         if (nfc_runtime.ce_state == CE_STATE_IDLE)
         {
@@ -228,7 +228,7 @@ static bool nfc_ce_task(void)
             nfc_start_rx();
         }
         break;
-        
+
     case RFAL_NFC_STATE_DATAEXCHANGE_DONE:
     case RFAL_NFC_STATE_DATAEXCHANGE:
     case RFAL_NFC_STATE_LISTEN_SLEEP:
@@ -360,7 +360,7 @@ static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len)
 
     if (err != RFAL_ERR_NONE)
     {
-        debug_log("CE start TX failed: %d" nl, err);
+        error_log("ERROR: CE start TX failed: %d" nl, err);
         nfc_runtime.ce_state = CE_STATE_ERROR_RECOVERY;
         return false;
     }
@@ -399,7 +399,10 @@ static bool nfc_poll_transmission_status(transmission_line_t line)
 static void nfc_enter_error_recovery(const char* msg, const ErrorStatus err)
 {
     error_log(red("ERROR: CE: %s (%d)") nl, msg, err);
-
+    if (err == RFAL_ERR_NOMEM)
+    {
+        error_log(red("The key ran out of memory, please reset the key") nl);
+    }
     nfc_runtime.ce_state = CE_STATE_ERROR_RECOVERY;
     (void) rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
 }
@@ -411,7 +414,7 @@ static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
         error_log(red("ERROR: CE: apdu received is NULL" nl));
         return;
     }
-    debug_log("Received APDU (%u bytes): %s" nl, apdu_len, hex2Str(apdu, apdu_len));
+    debug_log(blue("Received APDU (%u bytes): %s" nl), apdu_len, hex2Str(apdu, apdu_len));
 }
 
 static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
@@ -421,5 +424,5 @@ static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
         error_log(red("ERROR: CE: apdu sent is NULL" nl));
         return;
     }
-    debug_log("Sent APDU (%u bytes): %s" nl, apdu_len, hex2Str(apdu, apdu_len));
+    debug_log(blue("Sent APDU (%u bytes): %s" nl), apdu_len, hex2Str(apdu, apdu_len));
 }
