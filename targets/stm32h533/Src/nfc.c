@@ -261,7 +261,10 @@ static bool nfc_ce_task(void)
 static bool nfc_handle_wait_rx(void)
 {
 
-    nfc_poll_transmission_status(RX);
+    if (!nfc_poll_transmission_status(RX))
+    {
+        return false;
+    }
 
     if ((nfc_runtime.rx_data == NULL) || (nfc_runtime.rcv_len == NULL))
     {
