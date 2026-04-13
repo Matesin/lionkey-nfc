@@ -249,7 +249,6 @@ target_sources(st25rfal PRIVATE
 		# RFAL core
 		${ST_RFAL_LIB_PATH}/source/rfal_nfc.c
 		${ST_RFAL_LIB_PATH}/source/rfal_nfca.c
-		${ST_RFAL_LIB_PATH}/source/rfal_nfcDep.c
 		${ST_RFAL_LIB_PATH}/source/rfal_isoDep.c
 		${ST_RFAL_LIB_PATH}/source/rfal_crc.c
 		${ST_RFAL_LIB_PATH}/source/rfal_analogConfig.c
@@ -272,7 +271,7 @@ target_sources(st25rfal PRIVATE
 target_link_libraries(st25rfal PUBLIC stm32cubemx core)
 
 # global device definition macro
-target_compile_definitions(st25rfal PUBLIC ST25R3916B=1 RFAL_TEST_MODE=1)
+target_compile_definitions(st25rfal PUBLIC ST25R3916B=1)
 
 target_link_directories(${PROJECT_NAME} PRIVATE)
 
