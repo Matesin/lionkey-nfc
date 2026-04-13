@@ -38,8 +38,9 @@
 #define CTAP_MAX_USER_PRESENCE_TIME_LIMIT_NFC   (12U * 1000U) // 12s (in ms)
 
 /* Class byte values */
-#define NFC_CLA_ISO                             0x00
-#define NFC_CLA_CTAP                            0x80
+#define NFC_CLA_ISO                             0x00U
+#define NFC_CLA_CTAP                            0x80U
+#define NFC_CLA_CTAP_CHAIN                      0x90U
 
 #define NFC_PARSE_WRONG_SIZE                    1U
 
