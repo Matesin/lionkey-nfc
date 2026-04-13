@@ -16,6 +16,7 @@
 #include <stdint.h>
 
 #include "ctaphid.h"
+#include "rfal_platform.h"
 
 /* GLOBAL DEFINES */
 /*! NFC specific -------------------------------------------------------*/
@@ -49,7 +50,7 @@
 #define NFC_SW_WRONG_DATA                0x6A80U            /*!< Wrong data (e.g., invalid command data) */
 #define NFC_SW_FILE_SELECTED             0x6A84U            /*!< File already selected (e.g., trying to select a file that's already selected) */
 
-#define TX_BUF_SIZE                      512
+#define TX_BUF_SIZE                      RFAL_FEATURE_ISO_DEP_APDU_MAX_LEN
 
 /* GLOBAL DEFINES */
 /*! Enums ------------------------------------------------------------*/
@@ -128,6 +129,12 @@ typedef struct
     uint8_t  chain_buf[CTAPHID_MAX_PAYLOAD_LENGTH]; /*!< CE context: buffer for building responses larger than Le */
     uint16_t chain_offset;                          /*!< CE context: offset in the chain buffer for the current response being built (for responses larger than Le) */
     uint16_t chain_len;                             /*!< CE context: remaining length of the response to be sent in the chain buffer (for responses larger than Le) */
+    uint16_t negotiated_inf_len;                 /*!< CE context: frame size negotiated with the reader, used for determining the maximum response size that can be sent in one block without chaining */
+
+    bool     is_chaining;
+    bool     extended;
+
+    size_t resp_len_expexted;
 } t4t_context_t;
 
 /*! Runtime struct to hold the state of the NFC peripheral and its context */
