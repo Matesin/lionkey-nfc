@@ -225,6 +225,8 @@ static bool nfc_ce_task(void)
         if (nfc_runtime.ce_state == CE_STATE_IDLE)
         {
             debug_log("CE: start waiting for command" nl);
+            nfc_runtime.ce_ctx.negotiated_inf_len = rfalIsoDepGetMaxInfLen();
+            debug_log(yellow("CE: negotiated max frame size: %u" nl), nfc_runtime.ce_ctx.negotiated_inf_len);
             nfc_start_rx();
         }
         break;
@@ -304,6 +306,7 @@ static bool nfc_handle_process_rx(void)
 
     if (!nfc_start_tx(nfc_runtime.tx_buf, nfc_runtime.tx_len))
     {
+        nfc_enter_error_recovery("Failed to start TX after processing RX", 69);
         rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
     }
     return false;
@@ -363,7 +366,7 @@ static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len)
 
     if (err != RFAL_ERR_NONE)
     {
-        error_log("ERROR: CE start TX failed: %d" nl, err);
+        error_log(red("ERROR: CE start TX failed: %d") nl, err);
         nfc_runtime.ce_state = CE_STATE_ERROR_RECOVERY;
         return false;
     }
