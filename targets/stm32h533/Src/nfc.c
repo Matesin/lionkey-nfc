@@ -16,7 +16,7 @@ extern ctap_state_t app_ctap;
  * 7-byte UIDs need a manufacturer ID and need to assure uniqueness of the rest.*/
 static const uint8_t NFCID[]     = {0x5F, 'L', 'N', 'K'};    /* =_LNK, 5F  4C  4E  4B NFCID1 / UID (4 bytes) - static value */
 static const uint8_t SENS_RES[]  = {0x44, 0x00};             /* SENS_RES / ATQA for 4-byte UID            */
-static const uint8_t SEL_RES     = 0x20U;                     /* SEL_RES / SAK */
+static const uint8_t SEL_RES     = 0x20U;                    /* SEL_RES / SAK - 0x20 propagate ISO-DEP support*/
 
 /**
   * Ver : Indicates the NDEF mapping version <BR>
@@ -420,7 +420,8 @@ static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
         error_log(red("ERROR: CE: apdu received is NULL" nl));
         return;
     }
-    debug_log(blue("Received APDU (%u bytes): %s" nl), apdu_len, hex2Str(apdu, apdu_len));
+    debug_log(blue("Received APDU (%u bytes):"), apdu_len);
+    dump_hex_large(apdu, apdu_len);
 }
 
 static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
@@ -430,5 +431,6 @@ static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
         error_log(red("ERROR: CE: apdu sent is NULL" nl));
         return;
     }
-    debug_log(blue("Sent APDU (%u bytes): %s" nl), apdu_len, hex2Str(apdu, apdu_len));
+    debug_log(blue("Sent APDU (%u bytes): "), apdu_len);
+    dump_hex_large(apdu, apdu_len);
 }
