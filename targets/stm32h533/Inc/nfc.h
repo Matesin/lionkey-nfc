@@ -88,6 +88,15 @@ typedef enum
     NFC_CE_ACTIVE               /*! Card Emulation active, reader in range and can send APDU commands */
 } nfc_state_t;
 
+/*! APDU parsing status */
+typedef enum
+{
+    APDU_PARSE_OK = 0,          /*! APDU parsed successfully */
+    APDU_ERR_NULL,              /*! APDU parsing error: null pointer provided as input */
+    APDU_ERR_TOO_SHORT,         /*! APDU parsing error: length of the received message is less than 4 bytes (i.e., missing mandatory header fields) */
+    APDU_ERR_MALFORMED,         /*! APDU parsing error: APDU structure is malformed (e.g., Lc or Le fields do not match the actual length of the data, or the APDU is too long) */
+    APDU_ERR_OTHER              /*! APDU parsing error: other errors */
+} apdu_parse_status_t;
 
 /*! SPI line identifier */
 typedef enum
