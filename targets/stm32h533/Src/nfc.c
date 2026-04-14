@@ -7,6 +7,7 @@
 #include "rfal_nfc.h"
 #include "utils.h"
 #include "rfal_nfca.h"
+#include "eval_utils.h"
 
 extern ctap_state_t app_ctap;
 
@@ -18,6 +19,7 @@ static const uint8_t NFCID[]     = {0x5F, 'L', 'N', 'K'};    /* =_LNK, 5F  4C  4
 static const uint8_t SENS_RES[]  = {0x44, 0x00};             /* SENS_RES / ATQA for 4-byte UID            */
 static const uint8_t SEL_RES     = 0x20U;                    /* SEL_RES / SAK - 0x20 propagate ISO-DEP support*/
 
+static eval_timer_t nfc_timer;
 /**
   * Ver : Indicates the NDEF mapping version <BR>
   * Nbr : Indicates the number of blocks that can be read <BR>
@@ -83,6 +85,7 @@ void nfc_init(void)
     demoCeInit(NULL);
     #else
     nfc_init_session();
+    nfc_timer = create_timer();
     #endif
 
     debug_log("NFC initialized" nl);
@@ -415,6 +418,7 @@ static void nfc_enter_error_recovery(const char* msg, const ErrorStatus err)
 
 static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
 {
+    nfc_timer.start(&nfc_timer);
     if (apdu == NULL)
     {
         error_log(red("ERROR: CE: apdu received is NULL" nl));
@@ -426,6 +430,7 @@ static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
 
 static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
 {
+    nfc_timer.stop(&nfc_timer);
     if (apdu == NULL)
     {
         error_log(red("ERROR: CE: apdu sent is NULL" nl));
@@ -433,4 +438,5 @@ static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
     }
     debug_log(blue("Sent APDU (%u bytes): "), apdu_len);
     dump_hex_large(apdu, apdu_len);
+    debug_log(green("Response Time: %lu"nl),nfc_timer.elapsed_ms(&nfc_timer));
 }
