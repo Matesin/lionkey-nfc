@@ -34,17 +34,17 @@ static uint16_t ndef_handle_select(t4t_context_t *ctx, const nfc_apdu_t *apdu, u
 static uint16_t ndef_handle_read(const t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp, uint16_t rsp_len);
 static uint16_t ndef_handle_update(const t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf);
 
-apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out) {
+uint16_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out) {
     /* check for valid structure */
     if ((raw == NULL) || (out == NULL))
     {
         debug_log(red("APDU parsing error: invalid input") nl);
-        return APDU_ERR_MALFORMED;
+        return NFC_SW_WRONG_PARAMS;
     }
 
     if (raw_len < 4U)
     {
-        return  APDU_ERR_TOO_SHORT;
+        return  NFC_SW_WRONG_LENGTH;
     }
 
     out->cla  = raw[0];
@@ -61,7 +61,7 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
     /* Case 1S */
     if (raw_len == 4U)
     {
-        return APDU_PARSE_OK;
+        return NFC_SW_OK;
     }
 
     if (raw[4] != 0x00U)
@@ -73,7 +73,7 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
         {
             out->le = b1;
             out->has_le = true;
-            return APDU_PARSE_OK;
+            return NFC_SW_OK;
         }
 
         /* Case 3S */
@@ -81,7 +81,7 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
         {
             out->lc = b1;
             out->data = &raw[5];
-            return APDU_PARSE_OK;
+            return NFC_SW_OK;
         }
 
         /* Case 4S */
@@ -91,17 +91,17 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
             out->data = &raw[5];
             out->le = raw[5U + b1]; // Le = 0 stands for 256
             out->has_le = true;
-            return APDU_PARSE_OK;
+            return NFC_SW_OK;
         }
         debug_log(red("APDU parsing error: invalid short APDU length") nl);
-        return APDU_ERR_MALFORMED;
+        return NFC_SW_WRONG_LENGTH;
     }
 
     /* Extended APDU */
     if (raw_len < 7)
     {
         debug_log(red("APDU parsing error: invalid extended APDU length") nl);
-        return APDU_ERR_MALFORMED;
+        return NFC_SW_WRONG_LENGTH;
     }
 
     const uint16_t ext = read_16be(&raw[5]);
@@ -113,13 +113,13 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
     {
         out->le = (size_t) ext; // ext = 0 stands for 65536
         out->has_le = true;
-        return APDU_PARSE_OK;
+        return NFC_SW_OK;
     }
 
     /* For 3E and 4E ext is Lc, hence Lc = 0 is not valid here */
     if (ext == 0U)
     {
-        return APDU_ERR_MALFORMED;
+        return NFC_SW_WRONG_LENGTH;
     }
 
     /* Case 3E */
@@ -127,7 +127,7 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
     {
         out->lc = (size_t) ext;
         out->data = &raw[7];
-        return APDU_PARSE_OK;
+        return NFC_SW_OK;
     }
 
     /* Case 4E */
@@ -138,10 +138,10 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
         out->data = &raw[7];
         out->le = le16; // Le = 0 stands for 65536
         out->has_le = true;
-        return APDU_PARSE_OK;
+        return NFC_SW_OK;
     }
     debug_log(red("APDU parsing error: invalid extended APDU length")nl);
-    return APDU_ERR_MALFORMED;
+    return NFC_SW_WRONG_LENGTH;
 }
 
 static uint16_t fido_handle_ctap(t4t_context_t *ctx,
@@ -425,7 +425,7 @@ static uint16_t ndef_handle_update(const t4t_context_t *ctx,
 uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx_data_len, uint8_t *tx_buf, uint16_t tx_buf_len )
 {
     nfc_apdu_t apdu;
-    apdu_parse_status_t err;
+    uint16_t err;
 
     if ((ctx == NULL) || (tx_buf == NULL) || (tx_buf_len < 2U)) {
         error_log(red("NFC: ERROR: Invalid response buffer") nl);
@@ -434,16 +434,13 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
 
     /* parse APDU */
     err = nfc_parse_apdu(rx_data, rx_data_len, &apdu);
-    if (err != APDU_PARSE_OK)
+    if (err != NFC_SW_OK)
     {
-        error_log(red("NFC: ERROR: Failed to parse APDU (Error code: %u)") nl, err);
-    } else debug_log(green("NFC: APDU parsed successfully") nl);
-
-    /* error while parsing */
-    if (err != APDU_PARSE_OK) {
-        error_log(magenta("NFC: ERROR: Invalid response buffer") nl);
-        return nfc_put_sw(tx_buf, NFC_SW_WRONG_DATA);
+        error_log(red("NFC: ERROR: Failed to parse APDU (Error code: %02X)") nl, err);
+        return nfc_put_sw(tx_buf, NFC_SW_WRONG_PARAMS);
     }
+    debug_log(green("NFC: APDU parsed successfully") nl);
+
 
     /* handle deselect - slightly more vague than in the definition */
     if (apdu.ins == NFC_INS_DESELECT) {

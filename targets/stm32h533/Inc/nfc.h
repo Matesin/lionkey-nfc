@@ -16,7 +16,6 @@
 #include <stdint.h>
 
 #include "ctaphid.h"
-#include "rfal_platform.h"
 
 /* GLOBAL DEFINES */
 /*! NFC specific -------------------------------------------------------*/
@@ -50,7 +49,7 @@
 #define NFC_SW_WRONG_DATA                0x6A80U            /*!< Wrong data (e.g., invalid command data) */
 #define NFC_SW_FILE_SELECTED             0x6A84U            /*!< File already selected (e.g., trying to select a file that's already selected) */
 
-#define TX_BUF_SIZE                      RFAL_FEATURE_ISO_DEP_APDU_MAX_LEN
+#define TX_BUF_SIZE                      512U
 
 /* GLOBAL DEFINES */
 /*! Enums ------------------------------------------------------------*/
@@ -89,15 +88,6 @@ typedef enum
     NFC_CE_ACTIVE               /*! Card Emulation active, reader in range and can send APDU commands */
 } nfc_state_t;
 
-/*! APDU parsing status */
-typedef enum
-{
-    APDU_PARSE_OK = 0,          /*! APDU parsed successfully */
-    APDU_ERR_NULL,              /*! APDU parsing error: null pointer provided as input */
-    APDU_ERR_TOO_SHORT,         /*! APDU parsing error: length of the received message is less than 4 bytes (i.e., missing mandatory header fields) */
-    APDU_ERR_MALFORMED,         /*! APDU parsing error: APDU structure is malformed (e.g., Lc or Le fields do not match the actual length of the data, or the APDU is too long) */
-    APDU_ERR_OTHER              /*! APDU parsing error: other errors */
-} apdu_parse_status_t;
 
 /*! SPI line identifier */
 typedef enum

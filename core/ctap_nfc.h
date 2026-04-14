@@ -85,7 +85,7 @@ typedef struct
  * @return APDU_ERR_TOO_SHORT if the length of the received message is less than 4
  * @return APDU_ERR_MALFORMED otherwise
  */
-apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out);
+uint16_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out);
 
 /**
  * @brief NFC Put SW
