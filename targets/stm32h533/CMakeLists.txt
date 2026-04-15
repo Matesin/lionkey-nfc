@@ -287,6 +287,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 		Src/nfc_test.c
 		Src/spi.c
 		Src/demo_ce.c
+		Src/eval_utils.c
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
