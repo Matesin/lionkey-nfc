@@ -459,13 +459,8 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
     if (err != APDU_PARSE_OK)
     {
         error_log(red("NFC: ERROR: Failed to parse APDU (Error code: %u)") nl, err);
-    } else debug_log(green("NFC: APDU parsed successfully") nl);
-
-    /* error while parsing */
-    if (err != APDU_PARSE_OK) {
-        error_log(magenta("NFC: ERROR: Invalid response buffer") nl);
         return nfc_put_sw(tx_buf, NFC_SW_WRONG_DATA);
-    }
+    } else debug_log(green("NFC: APDU parsed successfully") nl);
 
     /* handle deselect - slightly more vague than in the definition */
     if (apdu.ins == NFC_INS_DESELECT) {
@@ -515,11 +510,7 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
         return nfc_put_sw(tx_buf, NFC_SW_FILE_NOT_FOUND);
     }
 
-    /* Handle FIDO response */
-    if ((apdu.cla == NFC_CLA_ISO) && (apdu.ins == NFC_INS_GET_RESPONSE))
-    {
-        return fido_handle_ctap_get_response(ctx, &apdu, tx_buf, tx_buf_len);
-    }
+
 
     /* Decide on action based on the currently selected applet */
     switch (ctx->selected_app)
@@ -540,6 +531,10 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
             if (apdu.cla == NFC_CLA_CTAP)
             {
                 return fido_handle_ctap_request_short(ctx, &apdu, tx_buf, tx_buf_len);
+            }
+            if ((apdu.cla == NFC_CLA_ISO) && (apdu.ins == NFC_INS_GET_RESPONSE)) /* Handle FIDO response */
+            {
+                return fido_handle_ctap_get_response(ctx, &apdu, tx_buf, tx_buf_len);
             }
             return nfc_put_sw(tx_buf, NFC_SW_CLA_NOT_SUPPORTED);
 
