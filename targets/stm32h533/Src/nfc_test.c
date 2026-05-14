@@ -421,7 +421,8 @@ ReturnCode demoTransceiveBlocking( uint8_t *txBuf, uint16_t txBufSize, uint8_t *
         while( err == RFAL_ERR_BUSY );
         if (txBuf != NULL)
         {
-            debug_log("TX: %s" nl, hex2Str(txBuf, txBufSize));
+            debug_log("TX: ");
+            dump_hex_large(txBuf, txBufSize);
         }
     }
     return err;

@@ -116,7 +116,7 @@ typedef struct
     const uint8_t *cc_file;     /*!< CE context: contents of the CC file (to be initialised in the init function)*/
     uint16_t cc_file_len;       /*!< CE context: length of the CC file */
 
-    uint8_t *ndef_file;         /*!< CE context: contents of the NDEF file (to be initialised in the init function)*/
+    const uint8_t *ndef_file;         /*!< CE context: contents of the NDEF file (to be initialised in the init function)*/
     uint16_t ndef_file_len;     /*!< CE context: length of the NDEF file */
 
     uint16_t fid_cc;            /*!< CE context: file ID of the CC file (to be initialised in the init function) */
