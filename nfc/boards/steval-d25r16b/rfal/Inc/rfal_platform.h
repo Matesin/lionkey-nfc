@@ -77,6 +77,7 @@ extern "C" {
 
 #define platformTimerCreate( t )                      timerCalculateTimer(t)                        /*!< Create a timer with the given time (ms)     */
 #define platformTimerIsExpired( timer )               timerIsExpired(timer)                         /*!< Checks if the given timer is expired        */
+#define isoDepTimerIsExpired( timer )                 wtxTimerIsExpired(timer)                      /*!< Checks if the given timer is expired for WTX */
 #define platformTimerDestroy( timer )                                                               /*!< Stop and release the given timer            */
 #define platformTimerGetRemaining(t)                  (timerGetRemaining(t))
 #define platformDelay( t )                            HAL_Delay( t )                                /*!< Performs a delay for the given time (ms)    */

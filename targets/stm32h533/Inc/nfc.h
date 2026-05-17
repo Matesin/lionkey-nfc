@@ -130,7 +130,8 @@ typedef struct
     uint16_t chain_len;                             /*!< CE context: remaining length of the response to be sent in the chain buffer (for responses larger than Le) */
     uint16_t negotiated_inf_len;                 /*!< CE context: frame size negotiated with the reader, used for determining the maximum response size that can be sent in one block without chaining */
 
-    bool     is_chaining;
+    bool     chaining_out;
+    bool     chaining_in;
     bool     extended;
 
     size_t resp_len_expexted;

@@ -32,7 +32,6 @@
 #define NFC_INS_CTAP                            0x10U
 #define NFC_INS_DESELECT                        0x12U
 #define NFC_INS_GET_RESPONSE                    0xC0U
-#define NFC_INS_CTAP_CONTROL                    0x12U
 
 /* Maximal time of user presence (5.) */
 #define CTAP_MAX_USER_PRESENCE_TIME_LIMIT_NFC   (12U * 1000U) // 12s (in ms)

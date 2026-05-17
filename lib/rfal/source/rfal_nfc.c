@@ -1912,7 +1912,7 @@ static ReturnCode rfalNfcListenActivation( void )
                     
                     /* Set ATS parameters */
                     atsParam.fsci       = (uint8_t)RFAL_ISODEP_DEFAULT_FSCI;
-                    atsParam.fwi        = RFAL_ISODEP_DEFAULT_FWI;
+                    atsParam.fwi        = 11;
                     atsParam.sfgi       = RFAL_ISODEP_DEFAULT_SFGI;
                     atsParam.didSupport = false;
                     atsParam.ta         = RFAL_ISODEP_ATS_TA_SAME_D;

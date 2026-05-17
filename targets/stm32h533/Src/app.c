@@ -29,7 +29,7 @@ const ctap_storage_t app_storage = STM32H533_FLASH_STORAGE_CONST_INIT(&app_stora
 
 static stm32h533_crypto_context_t app_hw_crypto_ctx;
 const ctap_crypto_t app_hw_crypto = STM32H533_CRYPTO_CONST_INIT(&app_hw_crypto_ctx);
-
+extern bool isKeyGen;
 ctaphid_state_t app_ctaphid;
 static const uint8_t app_ctaphid_capabilities =
 	CTAPHID_CAPABILITY_WINK | CTAPHID_CAPABILITY_CBOR | CTAPHID_CAPABILITY_NMSG;
@@ -96,7 +96,11 @@ static void app_ctap_send_keepalive_if_needed(ctap_keepalive_status_t current_st
 			return;
 		}
 		// run rfalWorker, automatically checks if WTX is needed
-		rfalWorker();
+		if (isKeyGen)
+		{
+			debug_log(cyan("running rfalWorker to check for WTX") nl);
+			rfalWorker();
+		}
 	}
 }
 

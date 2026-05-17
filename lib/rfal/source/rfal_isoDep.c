@@ -143,7 +143,7 @@
 #define ISODEP_PCB_SWTX                 ( ISODEP_PCBSBLOCK | ISODEP_PCB_WTX )             /*!< PCB Value of a S-Block with WTX        */
 #define ISODEP_PCB_SPARAMETERS          ( ISODEP_PCB_SBLOCK | ISODEP_PCB_WTX )            /*!< PCB Value of a S-Block with PARAMETERS */
 
-#define ISODEP_FWI_LIS_MAX_NFC          8U                            /*!< FWT Listener Max FWIT4ATmax FWIBmax  Digital 1.1  A6 & A3  */
+#define ISODEP_FWI_LIS_MAX_NFC          14U       /* Max listening FWI (LionKey specific)                    /*!< FWT Listener Max FWIT4ATmax FWIBmax  Digital 1.1  A6 & A3  */
 #define ISODEP_FWI_LIS_MAX_EMVCO        7U                            /*!< FWT Listener Max FWIMAX       EMVCo 2.6 A.5                */
 #define ISODEP_FWI_LIS_MAX              (uint8_t)((gIsoDep.compMode == RFAL_COMPLIANCE_MODE_EMV) ? ISODEP_FWI_LIS_MAX_EMVCO : ISODEP_FWI_LIS_MAX_NFC)  /*!< FWI Listener Max as NFC / EMVCo */
 #define ISODEP_FWT_LIS_MAX              rfalIsoDepFWI2FWT(ISODEP_FWI_LIS_MAX)             /*!< FWT Listener Max                       */
@@ -302,7 +302,7 @@
 #define rfalIsoDepReEnableRx( rxB, rxBL, rxL ) rfalTransceiveBlockingTx( NULL, 0, rxB, rxBL, rxL, RFAL_TXRX_FLAGS_DEFAULT, RFAL_FWT_NONE )
 
 #define rfalIsoDepTimerStart( timer, time_ms ) do{ platformTimerDestroy( timer ); (timer) = platformTimerCreate((uint16_t)(time_ms));} while (0) /*!< Configures and starts the WTX timer  */
-#define rfalIsoDepTimerisExpired( timer )      platformTimerIsExpired( timer )                               /*!< Checks WTX timer has expired                     */
+#define rfalIsoDepTimerisExpired( timer )      isoDepTimerIsExpired( timer )
 #define rfalIsoDepTimerDestroy( timer )        platformTimerDestroy( timer )                                 /*!< Destroys WTX timer                               */
 
 /*
@@ -1478,6 +1478,7 @@ ReturnCode rfalIsoDepStartTransceive( rfalIsoDepTxRxParam param )
     gIsoDep.txBufInfPos  = (uint8_t)((uintptr_t)param.txBuf->inf - (uintptr_t)param.txBuf->prologue);
     gIsoDep.txBufLen     = param.txBufLen;
     gIsoDep.isTxChaining = param.isTxChaining;
+    debug_log("TxBuf: %p, TxBufInfPos: %u, TxBufLen: %u, isTxChaining: %u" nl, (void*)gIsoDep.txBuf, gIsoDep.txBufInfPos, gIsoDep.txBufLen, gIsoDep.isTxChaining);
     
     gIsoDep.rxBuf        = param.rxBuf->prologue;
     gIsoDep.rxBufInfPos  = (uint8_t)((uintptr_t)param.rxBuf->inf - (uintptr_t)param.rxBuf->prologue);
@@ -1736,7 +1737,7 @@ static ReturnCode rfalIsoDepDataExchangePICC( void )
                     
                     /* Set WTX timer */
                     rfalIsoDepTimerStart( gIsoDep.WTXTimer, rfalIsoDep_WTXAdjust( (gIsoDep.lastWTXM * rfalConv1fcToMs( gIsoDep.fwt )) ) );
-                    
+                    debug_log("Received S-WTX with WTXM: %u, starting WTX timer for %u ms" nl, gIsoDep.lastWTXM, rfalIsoDep_WTXAdjust( (gIsoDep.lastWTXM * rfalConv1fcToMs( gIsoDep.fwt )) ) );
                     gIsoDep.state = ISODEP_ST_PICC_SWTX;
                     return RFAL_ERR_BUSY;
                 }
@@ -1795,7 +1796,7 @@ static ReturnCode rfalIsoDepDataExchangePICC( void )
                 /* Rule 9 - PICC is allowed to send an S(WTX) instead of an I-block or an R(ACK) */
                 rfalIsoDepTimerStart( gIsoDep.WTXTimer, rfalIsoDep_WTXAdjust( rfalConv1fcToMs( gIsoDep.fwt )) );
                 gIsoDep.state = ISODEP_ST_PICC_SWTX;
-                
+                debug_log("Received R-ACK with not current BN, toggling BN to %u and starting WTX timer for %u ms" nl, gIsoDep.blockNumber, rfalIsoDep_WTXAdjust( rfalConv1fcToMs( gIsoDep.fwt )) );
                 /* Rule 13 - R(ACK) with not current bn -> continue chaining */
                 return RFAL_ERR_NONE;                                 /* This block has been transmitted */
             }
@@ -1890,7 +1891,7 @@ static ReturnCode rfalIsoDepDataExchangePICC( void )
         /*******************************************************************************/
         /* Reception done, send data back and start WTX timer                          */
         rfalIsoDepTimerStart( gIsoDep.WTXTimer, rfalIsoDep_WTXAdjust( rfalConv1fcToMs( gIsoDep.fwt )) );
-        
+        debug_log("Received I-Block, starting WTX timer for %u ms" nl, rfalIsoDep_WTXAdjust( rfalConv1fcToMs( gIsoDep.fwt )) );
         gIsoDep.state = ISODEP_ST_PICC_SWTX;
         return RFAL_ERR_NONE;
     }    
@@ -2750,7 +2751,7 @@ ReturnCode rfalIsoDepStartApduTransceive( rfalIsoDepApduTxRxParam param )
     
     /* Convert APDU TxRxParams to I-Block TxRxParams */
     rfalIsoDepApdu2IBLockParam( gIsoDep.APDUParam, &txRxParam, gIsoDep.APDUTxPos, gIsoDep.APDURxPos );
-    
+
     return rfalIsoDepStartTransceive( txRxParam );
 }
  
