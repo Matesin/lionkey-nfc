@@ -17,7 +17,7 @@ extern ctap_state_t app_ctap;
  * 7-byte UIDs need a manufacturer ID and need to assure uniqueness of the rest.*/
 static const uint8_t NFCID[]     = {0x5F, 'L', 'N', 'K'};    /* =_LNK, 5F  4C  4E  4B NFCID1 / UID (4 bytes) - static value */
 static const uint8_t SENS_RES[]  = {0x44, 0x00};             /* SENS_RES / ATQA for 4-byte UID            */
-static const uint8_t SEL_RES     = 0x20U;                     /* SEL_RES / SAK */
+static const uint8_t SEL_RES     = 0x20U;                    /* SEL_RES / SAK - 0x20 propagate ISO-DEP support*/
 
 static eval_timer_t nfc_timer;
 /**
@@ -227,6 +227,8 @@ static bool nfc_ce_task(void)
         if (nfc_runtime.ce_state == CE_STATE_IDLE)
         {
             debug_log("CE: start waiting for command" nl);
+            nfc_runtime.ce_ctx.negotiated_inf_len = rfalIsoDepGetMaxInfLen();
+            debug_log(yellow("CE: negotiated max frame size: %u" nl), nfc_runtime.ce_ctx.negotiated_inf_len);
             nfc_start_rx();
         }
         break;
@@ -315,6 +317,7 @@ static bool nfc_handle_process_rx(void)
 
     if (!nfc_start_tx(nfc_runtime.tx_buf, nfc_runtime.tx_len))
     {
+        nfc_enter_error_recovery("Failed to start TX after processing RX", 69);
         rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
     }
     return false;
@@ -378,7 +381,7 @@ static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len)
 
     if (err != RFAL_ERR_NONE)
     {
-        error_log("ERROR: CE start TX failed: %d" nl, err);
+        error_log(red("ERROR: CE start TX failed: %d") nl, err);
         nfc_runtime.ce_state = CE_STATE_ERROR_RECOVERY;
         return false;
     }
@@ -446,6 +449,7 @@ static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
 
 static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
 {
+    nfc_timer.stop(&nfc_timer);
     if (apdu == NULL)
     {
         error_log(red("ERROR: CE: apdu sent is NULL" nl));
