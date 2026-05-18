@@ -247,6 +247,8 @@ LION_ATTR_ALWAYS_INLINE static inline uint8_t ctap_invoke_handler(
 		params_it_ptr = &params_it;
 	}
 
+	ctap_send_keepalive_if_needed(CTAP_STATUS_UPNEEDED);
+
 	// Note that some commands do not take any input parameters at all.
 	// Their corresponding handlers completely ignore the params (CborValue *it) argument.
 	// This is probably the best future-proof behavior, similar to the ignoring
@@ -312,6 +314,8 @@ uint8_t ctap_request(
 	ctap_pin_uv_auth_token_check_usage_timer(state);
 
 	ctap_discard_stateful_command_state_if_expired(state);
+
+	ctap_send_keepalive_if_needed(CTAP_STATUS_UPNEEDED);
 
 	uint8_t status = ctap_invoke_handler(state, cmd, params_size, params, response);
 

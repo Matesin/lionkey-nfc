@@ -18,6 +18,8 @@ platformTimer_t timerCalculateTimer(uint32_t ms);
 /* deadline is absolute timestamp (as returned by timerCalculateTimer) */
 bool timerIsExpired(platformTimer_t deadline);
 
+bool wtxTimerIsExpired(platformTimer_t deadline);
+
 /* Remaining time until deadline in ms (0 if expired) */
 uint32_t timerGetRemaining(platformTimer_t deadline);
 

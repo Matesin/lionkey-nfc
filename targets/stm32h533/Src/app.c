@@ -29,7 +29,7 @@ const ctap_storage_t app_storage = STM32H533_FLASH_STORAGE_CONST_INIT(&app_stora
 
 static stm32h533_crypto_context_t app_hw_crypto_ctx;
 const ctap_crypto_t app_hw_crypto = STM32H533_CRYPTO_CONST_INIT(&app_hw_crypto_ctx);
-
+extern bool isKeyGen;
 ctaphid_state_t app_ctaphid;
 static const uint8_t app_ctaphid_capabilities =
 	CTAPHID_CAPABILITY_WINK | CTAPHID_CAPABILITY_CBOR | CTAPHID_CAPABILITY_NMSG;
@@ -70,7 +70,6 @@ static void app_ctaphid_send_keepalive(ctap_keepalive_status_t status) {
 }
 
 static void app_ctap_send_keepalive_if_needed(ctap_keepalive_status_t current_status) {
-
 	if (!app_ctap.nfc_timer.nfc_user_present && !app_ctap.nfc_timer.nfc_ctap_in_use)
 	{
 		// send immediately whenever the status changes
@@ -90,9 +89,17 @@ static void app_ctap_send_keepalive_if_needed(ctap_keepalive_status_t current_st
 	}
 	else
 	{
+		//check if user presence timer is expired
 		if (ctap_nfc_is_user_presence_timer_expired(&app_ctap.nfc_timer) && app_ctap.nfc_timer.nfc_user_present) {
 			info_log(yellow("User presence timer expired, resetting user presence status") nl);
 			ctap_nfc_stop_user_presence_timer(&app_ctap.nfc_timer);
+			return;
+		}
+		// run rfalWorker, automatically checks if WTX is needed
+		if (isKeyGen)
+		{
+			debug_log(cyan("running rfalWorker to check for WTX") nl);
+			rfalWorker();
 		}
 	}
 }

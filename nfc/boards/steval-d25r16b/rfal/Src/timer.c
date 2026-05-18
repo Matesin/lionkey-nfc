@@ -8,6 +8,8 @@
  * Deadline = now + ms, in HAL ticks (1 tick = 1 ms if SysTick configured that way).
  * HAL_GetTick() is uint32_t and wraps around naturally.
  */
+
+extern bool isKeyGen;
 platformTimer_t timerCalculateTimer(uint32_t ms)
 {
     return (platformTimer_t)(HAL_GetTick() + ms);
@@ -20,6 +22,13 @@ platformTimer_t timerCalculateTimer(uint32_t ms)
 
 bool timerIsExpired(platformTimer_t deadline)
 {
+    uint32_t now = HAL_GetTick();
+    return ((int32_t)(now - deadline) >= 0);
+}
+
+bool wtxTimerIsExpired(platformTimer_t deadline)
+{
+    if (isKeyGen) return true;
     uint32_t now = HAL_GetTick();
     return ((int32_t)(now - deadline) >= 0);
 }

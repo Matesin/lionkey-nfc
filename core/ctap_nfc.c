@@ -18,6 +18,8 @@ static const uint8_t FIDO_VERSION[] = {'F', 'I', 'D', 'O', '_', '2', '_', '0'}; 
 
 extern ctap_state_t app_ctap;
 
+bool isKeyGen = false;
+
 static uint8_t nfc_ctap_response_buffer[CTAPHID_MAX_PAYLOAD_LENGTH];
 
 static ctap_response_t nfc_ctap_response = {
@@ -29,12 +31,14 @@ static ctap_response_t nfc_ctap_response = {
 static inline uint16_t read_16be(const uint8_t *buf){ return ((uint16_t)buf[0] << 8) | buf[1];}
 
 static uint16_t fido_handle_ctap(t4t_context_t *ctx, const uint8_t *data_in, size_t data_in_len, uint8_t *tx_buf, uint16_t tx_buf_len);
-static uint16_t fido_handle_ctap_get_response(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
 static uint16_t fido_handle_ctap_request_extended(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
 static uint16_t fido_handle_ctap_request_short(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
 static uint16_t ndef_handle_select(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp);
 static uint16_t ndef_handle_read(const t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp, uint16_t rsp_len);
 static uint16_t ndef_handle_update(const t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf);
+static uint16_t fido_handle_ctap_chain_out(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
+static uint16_t fido_handle_ctap_chain_in(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
+static void reset_chain(t4t_context_t *ctx);
 
 apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out) {
     /* check for valid structure */
@@ -128,6 +132,11 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
     if (raw_len == (7U + (size_t)ext))
     {
         out->lc = (size_t) ext;
+        if (out->lc < raw_len - 7U)
+        {
+            debug_log(red("APDU parsing error: extended APDU length mismatch") nl);
+            return APDU_ERR_MALFORMED;
+        }
         out->data = &raw[7];
         return APDU_PARSE_OK;
     }
@@ -137,6 +146,11 @@ apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_
     {
         const uint16_t le16 = read_16be(&raw[7U + (size_t)ext]);
         out->lc = (size_t) ext;
+        if (out->lc < raw_len - 9U)
+        {
+            debug_log(red("APDU parsing error: extended APDU length mismatch") nl);
+            return APDU_ERR_MALFORMED;
+        }
         out->data = &raw[7];
         out->le = le16; // Le = 0 stands for 65536
         out->has_le = true;
@@ -161,9 +175,11 @@ static uint16_t fido_handle_ctap(t4t_context_t *ctx,
     debug_log("NFC: CTAP cmd=0x%02X cbor_len=%u" nl,
               ctap_cmd, (unsigned)cbor_len);
 
+    isKeyGen = (ctap_cmd == CTAP_CMD_MAKE_CREDENTIAL);
     nfc_ctap_response.length   = 0;
     nfc_ctap_response_buffer[0] = ctap_request(&app_ctap, ctap_cmd,
                                         cbor_len, cbor_in, &nfc_ctap_response);
+    isKeyGen = false;
 
     debug_log("NFC: CTAP response length=%u" nl, (unsigned)nfc_ctap_response.length);
 
@@ -183,6 +199,7 @@ static uint16_t fido_handle_ctap(t4t_context_t *ctx,
     /* short, check need for chaining */
     if (full_len <= ctx->resp_len_expexted) {
         ctx->chain_len = 0U;
+        ctx->chain_offset = 0U;
         return nfc_build_response(nfc_ctap_response_buffer, full_len, NFC_SW_OK, tx_buf, tx_buf_len);
     }
 
@@ -195,10 +212,11 @@ static uint16_t fido_handle_ctap(t4t_context_t *ctx,
         return nfc_put_sw(tx_buf, NFC_SW_WRONG_LENGTH);
     }
 
+    const uint16_t first_chunk = (full_len <= ctx->resp_len_expexted) ? (uint16_t)full_len : ctx->resp_len_expexted;
     memcpy(ctx->chain_buf, nfc_ctap_response_buffer, full_len);
-    ctx->chain_offset = ctx->resp_len_expexted;
-    ctx->chain_len    = (uint16_t)(full_len - ctx->resp_len_expexted);
-
+    ctx->chain_offset = first_chunk;
+    ctx->chain_len    = (uint16_t)(full_len - first_chunk);
+    ctx->chaining_out = true;
     debug_log("Response larger than Le, chaining: total_len=%u, sent=%u, remaining=%u" nl,
               (unsigned)full_len, (unsigned)nfc_ctap_response.length, (unsigned)ctx->chain_len);
 
@@ -206,20 +224,27 @@ static uint16_t fido_handle_ctap(t4t_context_t *ctx,
                                                   : (uint8_t)ctx->chain_len;
     uint16_t chain_sw = (uint16_t)(NFC_SW_CHAIN | remaining);
 
-    return nfc_build_response(ctx->chain_buf, ctx->resp_len_expexted, chain_sw, tx_buf, tx_buf_len);
+    return nfc_build_response(ctx->chain_buf, first_chunk, chain_sw, tx_buf, tx_buf_len);
 }
 
-static uint16_t fido_handle_ctap_get_response(t4t_context_t *ctx,
+static uint16_t fido_handle_ctap_chain_out(t4t_context_t *ctx,
                                          const nfc_apdu_t *apdu,
                                          uint8_t *tx_buf, uint16_t tx_buf_len)
 {
+    /* GET RESPONSE must be 80 C0 00 00 Le */
+    if ((apdu->ins != NFC_INS_GET_RESPONSE) || (apdu->p1 != 0x00U) || (apdu->p2 != 0x00U) || ctx->chaining_out == false)
+    {
+        debug_log(red("Invalid APDU for GET RESPONSE: INS=0x%02X P1=0x%02X P2=0x%02X") nl, apdu->ins, apdu->p1, apdu->p2);
+        return nfc_put_sw(tx_buf, NFC_SW_WRONG_PARAMS);
+    }
+
     /* no chain, return SW error */
     if (ctx->chain_len == 0U)
     {
         return nfc_put_sw(tx_buf, NFC_SW_COND_NOT_SATISFIED);
     }
 
-    const uint16_t le      = (apdu->le == 0U) ? 0xFFU : apdu->le;
+    const uint16_t le      = (apdu->le == 0U) ? NFC_APDU_SHORT_MAX_LEN: apdu->le;
     const uint16_t to_send = (ctx->chain_len <= le) ? ctx->chain_len : le;
 
     /* get position */
@@ -229,14 +254,14 @@ static uint16_t fido_handle_ctap_get_response(t4t_context_t *ctx,
     if ((ctx->chain_len - to_send) == 0U)
     {
         /* Last chunk */
-        ctx->chain_len = 0U;
+        reset_chain(ctx);
         return nfc_build_response(chunk, to_send, NFC_SW_OK, tx_buf, tx_buf_len);
     }
 
     ctx->chain_offset += to_send;
     ctx->chain_len    -= to_send;
 
-    const uint8_t remaining = (ctx->chain_len > 0xFFU) ? 0xFFU : (uint8_t)ctx->chain_len;
+    const uint8_t remaining = (ctx->chain_len >= NFC_APDU_SHORT_MAX_LEN) ? 0xFFU : (uint8_t)ctx->chain_len;
     const uint16_t chain_sw = (uint16_t)(NFC_SW_CHAIN | remaining);
 
     return nfc_build_response(chunk, to_send, chain_sw, tx_buf, tx_buf_len);
@@ -266,6 +291,13 @@ static uint16_t fido_handle_ctap_request_short(t4t_context_t *ctx, const nfc_apd
     debug_log("Handling short APDU request: CLA=0x%02X INS=0x%02X P1=0x%02X P2=0x%02X Lc=%u Le=%u" nl,
               apdu->cla, apdu->ins, apdu->p1, apdu->p2, (unsigned)apdu->lc, (unsigned)apdu->le);
 
+    if (ctx->chaining_out)
+    {
+        debug_log(yellow("Received APDU while chaining in progress, treating as chain command") nl);
+        ctx->resp_len_expexted = ((apdu->le == 0 ) || (apdu->extended == false))? NFC_APDU_SHORT_MAX_LEN : apdu->le;
+        return fido_handle_ctap_chain_in(ctx, apdu, tx_buf, tx_buf_len);
+    }
+
     if ((apdu->lc == 0U) || (apdu->data == NULL))
     {
         debug_log(red("NFC CTAP: missing data in APDU") nl);
@@ -280,33 +312,38 @@ static uint16_t fido_handle_ctap_request_short(t4t_context_t *ctx, const nfc_apd
     return fido_handle_ctap(ctx, apdu->data, data_in_len, tx_buf, tx_buf_len);
 }
 
-static uint16_t fido_handle_ctap_request_chain(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len)
+static uint16_t fido_handle_ctap_chain_in(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len)
 {
     debug_log("Handling APDU chain: CLA=0x%02X INS=0x%02X P1=0x%02X P2=0x%02X Lc=%u Le=%u" nl,
               apdu->cla, apdu->ins, apdu->p1, apdu->p2, (unsigned)apdu->lc, (unsigned)apdu->le);
     // first apdu chain command, start chaining
     if (apdu->cla == NFC_CLA_CTAP_CHAIN)
     {
-        ctx->chain_offset = (uint16_t) apdu->lc;
-        ctx->chain_len    = ctx->chain_offset;
-        memcpy(ctx->chain_buf, apdu->data, ctx->chain_len);
-        ctx->is_chaining = true;
+        if (apdu->lc > sizeof(ctx->chain_buf)) {
+            reset_chain(ctx);
+            return nfc_put_sw(tx_buf, NFC_SW_WRONG_LENGTH);
+        }
+        memcpy(ctx->chain_buf, apdu->data, apdu->lc);
+        ctx->chain_len = (uint16_t)apdu->lc;
+        ctx->chain_offset = 0U;
+        ctx->chaining_in = true;
         return nfc_put_sw(tx_buf, NFC_SW_OK);
     }
+
     if (apdu->cla != NFC_CLA_CTAP)
     {
         return nfc_put_sw(tx_buf, NFC_SW_NOT_FOUND);
     }
+
     // subsequent apdu chain command, append to chain buffer
     if ((size_t)ctx->chain_len + apdu->lc > sizeof(ctx->chain_buf))
     {
         // protect against overflow
         debug_log(red("NFC CTAP: chain buffer overflow") nl);
-        ctx->chain_len = 0U;
-        ctx->is_chaining = false;
+        reset_chain(ctx);
         return nfc_put_sw(tx_buf, NFC_SW_WRONG_LENGTH);
     }
-    memcpy(ctx->chain_buf + ctx->chain_len, apdu->data, apdu->lc);
+    memcpy(&ctx->chain_buf[ctx->chain_len], apdu->data, apdu->lc);
     ctx->chain_len += (uint16_t) apdu->lc;
 
     if (!apdu->has_le)
@@ -315,8 +352,9 @@ static uint16_t fido_handle_ctap_request_chain(t4t_context_t *ctx, const nfc_apd
         return nfc_put_sw(tx_buf, NFC_SW_OK);
     }
     // last chain command, process the full request
-    ctx->is_chaining = false;
-    ctx->resp_len_expexted = apdu->le;
+    debug_log("Last APDU chain command received, processing full request: total_len=%u" nl, (unsigned)ctx->chain_len);
+    ctx->chaining_in = false;
+    ctx->resp_len_expexted = (apdu->le == 0U) ? NFC_APDU_SHORT_MAX_LEN : (uint16_t)apdu->le;
     return fido_handle_ctap(ctx, ctx->chain_buf, ctx->chain_len, tx_buf, tx_buf_len);
 }
 
@@ -459,13 +497,8 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
     if (err != APDU_PARSE_OK)
     {
         error_log(red("NFC: ERROR: Failed to parse APDU (Error code: %u)") nl, err);
+        return nfc_put_sw(tx_buf, NFC_SW_WRONG_LENGTH);
     } else debug_log(green("NFC: APDU parsed successfully") nl);
-
-    /* error while parsing */
-    if (err != APDU_PARSE_OK) {
-        error_log(magenta("NFC: ERROR: Invalid response buffer") nl);
-        return nfc_put_sw(tx_buf, NFC_SW_WRONG_DATA);
-    }
 
     /* handle deselect - slightly more vague than in the definition */
     if (apdu.ins == NFC_INS_DESELECT) {
@@ -491,7 +524,7 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
         {
             ctx->selected_app  = APP_FIDO;
             ctx->selected_file = FILE_NONE;
-            ctx->chain_len     = 0U;   /* clear any stale chained response */
+            reset_chain(ctx); // reset any previous chaining state
             debug_log(blue("NFC: FIDO AID selected") nl);
             app_ctap.nfc_timer.nfc_ctap_in_use = true;
             /* return FIDO version*/
@@ -504,7 +537,7 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
         {
             ctx->selected_app  = APP_NDEF;
             ctx->selected_file = FILE_NONE;
-            ctx->chain_len     = 0U;
+            reset_chain(ctx);
             debug_log(green("NFC: NDEF AID selected") nl);
             return nfc_put_sw(tx_buf, NFC_SW_OK);
         }
@@ -515,32 +548,31 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
         return nfc_put_sw(tx_buf, NFC_SW_FILE_NOT_FOUND);
     }
 
-    /* Handle FIDO response */
-    if ((apdu.cla == NFC_CLA_ISO) && (apdu.ins == NFC_INS_GET_RESPONSE))
-    {
-        return fido_handle_ctap_get_response(ctx, &apdu, tx_buf, tx_buf_len);
-    }
-
     /* Decide on action based on the currently selected applet */
     switch (ctx->selected_app)
     {
-        case APP_FIDO:
-            if (!(apdu.ins == NFC_INS_CTAP))
+    case APP_FIDO:
+        /* first chunk of chaining in incoming */
+            if (((apdu.cla == NFC_CLA_CTAP_CHAIN) && (apdu.ins == NFC_INS_CTAP)) ||
+                (ctx->chaining_in == true))
             {
-                return nfc_put_sw(tx_buf, NFC_SW_INS_NOT_SUPPORTED);
+                return fido_handle_ctap_chain_in(ctx, &apdu, tx_buf, tx_buf_len);
             }
-            if ((apdu.cla == NFC_CLA_CTAP_CHAIN) || (ctx->is_chaining))
+
+            if ((apdu.cla == NFC_CLA_CTAP) && (apdu.ins == NFC_INS_CTAP))
             {
-                return fido_handle_ctap_request_chain(ctx, &apdu, tx_buf, tx_buf_len);
-            }
-            if ((apdu.cla == NFC_CLA_CTAP) && (apdu.extended == true))
-            {
-                return fido_handle_ctap_request_extended(ctx, &apdu, tx_buf, tx_buf_len);
-            }
-            if (apdu.cla == NFC_CLA_CTAP)
-            {
+                if (apdu.extended == true)
+                {
+                    return fido_handle_ctap_request_extended(ctx, &apdu, tx_buf, tx_buf_len);
+                }
                 return fido_handle_ctap_request_short(ctx, &apdu, tx_buf, tx_buf_len);
             }
+            if ((apdu.cla == NFC_CLA_CTAP) && (apdu.ins == NFC_INS_GET_RESPONSE))
+            {
+                return fido_handle_ctap_chain_out(ctx, &apdu, tx_buf, tx_buf_len);
+            }
+            if (apdu.cla == NFC_CLA_CTAP) return nfc_put_sw(tx_buf, NFC_SW_INS_NOT_SUPPORTED);
+
             return nfc_put_sw(tx_buf, NFC_SW_CLA_NOT_SUPPORTED);
 
         case APP_NDEF:
@@ -634,4 +666,12 @@ void ctap_nfc_stop_user_presence_timer(nfc_user_presence_timer_t* t)
     debug_log(cyan("CE: stop user presence timer") nl);
     t->nfc_ctap_in_use = false;
     t->nfc_user_present = false;
+}
+
+static void reset_chain(t4t_context_t *ctx)
+{
+    ctx->chain_len = 0U;
+    ctx->chain_offset = 0U;
+    ctx->chaining_in = false;
+    ctx->chaining_out = false;
 }

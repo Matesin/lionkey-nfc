@@ -30,20 +30,19 @@ static eval_timer_t nfc_timer;
   * Ln : Is the size of the actual stored NDEF data in bytes <BR>
   * Checksum : allows the Reader/Writer to check whether the Attribute Data are correct <BR>
   */
-    static const uint8_t InformationBlock[] = { 0x00, 0x0F,                                       /* CCLEN      */
-                                                0x20,                                             /* T4T_VNo    */
-                                                0x10, 0x00,                                       /* MLe        */
-                                                0x10, 0x00,                                       /* MLc        */
-                                                0x04,                                             /* T          */
-                                                0x06,                                             /* L          */
-                                                (FID_NDEF & 0xFF00) >> 8, (FID_NDEF & 0x00FF),    /* V1         */
-                                                (NDEF_SIZE & 0xFF00) >> 8, (NDEF_SIZE & 0x00FF),  /* V2         */
-                                                0x00,                                             /* V3         */
-                                                0x00                                              /* V4         */
-                                              };
+static const uint8_t CC_FILE[] = {  0x00, 0x0F,                                       /* CCLEN      */
+                                    0x20,                                             /* T4T_VNo    */
+                                    0x00, 0xFF,                                       /* MLe        */
+                                    0x00, 0xFF,                                       /* MLc        */
+                                    0x04,                                             /* T          */
+                                    0x06,                                             /* L          */
+                                    (FID_NDEF & 0xFF00) >> 8, (FID_NDEF & 0x00FF),    /* V1         */
+                                    (NDEF_SIZE & 0xFF00) >> 8, (NDEF_SIZE & 0x00FF),  /* V2         */
+                                    0x00,                                             /* V3         */
+                                    0x00                                              /* V4         */
+};
 
-
-static uint8_t        ndefFile[] = {    0x00, 0x10, 0xD1, 0x01, 0x0C, 0x55, 0x01, 0x6C, 0x69, 0x6F, 0x6E, 0x6B, 0x65, 0x79, 0x2E, 0x64, 0x65, 0x76 };
+static const uint8_t NDEF_FILE[] = { 0x00, 0x10, 0xD1, 0x01, 0x0C, 0x55, 0x01, 0x6C, 0x69, 0x6F, 0x6E, 0x6B, 0x65, 0x79, 0x2E, 0x64, 0x65, 0x76 };
 
 static nfc_runtime_t nfc_runtime =
 {
@@ -77,7 +76,7 @@ void nfc_init(void)
 {
     debug_log("initializing NFC..." nl);
     if (!nfc_init_params()) {
-        debug_log(red("Failed to initialize NFC") nl);
+        error_log(red("ERROR: Failed to initialize NFC") nl);
         return;
     }
 
@@ -88,7 +87,7 @@ void nfc_init(void)
     nfc_timer = create_timer();
     #endif
 
-    debug_log("NFC initialized" nl);
+    info_log("NFC initialized" nl);
 }
 
 static bool nfc_init_params(void)
@@ -128,11 +127,11 @@ static void nfc_init_session(void)
 
     ctx->selected_app = APP_NONE;
 
-    ctx->cc_file = InformationBlock;
-    ctx->cc_file_len = sizeof(InformationBlock);
+    ctx->cc_file = CC_FILE;
+    ctx->cc_file_len = sizeof(CC_FILE);
 
-    ctx->ndef_file = ndefFile;
-    ctx->ndef_file_len = sizeof(ndefFile);
+    ctx->ndef_file = NDEF_FILE;
+    ctx->ndef_file_len = sizeof(NDEF_FILE);
 
     ctx->fid_cc = FID_CC;
     ctx->fid_ndef = FID_NDEF;
@@ -236,6 +235,9 @@ static bool nfc_ce_task(void)
 
     case RFAL_NFC_STATE_DATAEXCHANGE_DONE:
     case RFAL_NFC_STATE_DATAEXCHANGE:
+        /* expected during ISO-DEP exchange */
+        break;
+
     case RFAL_NFC_STATE_LISTEN_SLEEP:
         break;
     default:
@@ -257,6 +259,8 @@ static bool nfc_ce_task(void)
             return nfc_handle_wait_tx();
 
         case CE_STATE_ERROR_RECOVERY:
+            return false;
+
         default:
             nfc_enter_error_recovery("Invalid CE state", 0);
             return false;
@@ -285,6 +289,11 @@ static bool nfc_handle_wait_rx(void)
         return false;
     }
 
+    if (*nfc_runtime.rcv_len > TX_BUF_SIZE) {
+        nfc_enter_error_recovery("APDU too large", 0);
+        return false;
+    }
+
     nfc_log_received_apdu(nfc_runtime.rx_data, *nfc_runtime.rcv_len);
     nfc_runtime.ce_state = CE_STATE_PROCESS_RX;
     return false;
@@ -292,6 +301,7 @@ static bool nfc_handle_wait_rx(void)
 
 static bool nfc_handle_process_rx(void)
 {
+
     nfc_runtime.tx_len = nfc_parse_and_respond(&nfc_runtime.ce_ctx,
                                                 nfc_runtime.rx_data,
                                                 *nfc_runtime.rcv_len,
@@ -300,12 +310,10 @@ static bool nfc_handle_process_rx(void)
 
     if ((nfc_runtime.tx_len == NFC_PARSE_WRONG_SIZE) || (nfc_runtime.tx_len == 0))
     {
-        //TODO: error code
         nfc_enter_error_recovery("APDU response invalid", 0);
         return false;
     }
 
-    nfc_log_sent_apdu(nfc_runtime.tx_buf, nfc_runtime.tx_len);
 
     if (!nfc_start_tx(nfc_runtime.tx_buf, nfc_runtime.tx_len))
     {
@@ -332,8 +340,12 @@ static bool nfc_handle_wait_tx(void)
     {
         /* Exchange completed but no next APDU is available, re-arm the first receive path. */
         nfc_runtime.ce_state = CE_STATE_IDLE;
-        nfc_start_rx();
+        if (!nfc_start_rx())
+        {
+          nfc_enter_error_recovery("Failed to start RX after TX", 0);
+        }
     }
+    nfc_runtime.tx_len = 0;
     return false;
 }
 
@@ -408,11 +420,18 @@ static bool nfc_poll_transmission_status(transmission_line_t line)
 static void nfc_enter_error_recovery(const char* msg, const ErrorStatus err)
 {
     error_log(red("ERROR: CE: %s (%d)") nl, msg, err);
+
     if (err == RFAL_ERR_NOMEM)
     {
         error_log(red("The key ran out of memory, please reset the key") nl);
     }
     nfc_runtime.ce_state = CE_STATE_ERROR_RECOVERY;
+
+    if (err == RFAL_ERR_TIMEOUT || err == RFAL_ERR_PROTO) {
+        nfc_start_rx();
+        return;
+    }
+
     (void) rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
 }
 
@@ -436,7 +455,8 @@ static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
         error_log(red("ERROR: CE: apdu sent is NULL" nl));
         return;
     }
-    debug_log(blue("Sent APDU (%u bytes): "), apdu_len);
+    nfc_timer.stop(&nfc_timer);
+    info_log(cyan("APDU response time: %u ms") nl, (unsigned)nfc_timer.elapsed_ms(&nfc_timer));
+    info_log(blue("Sent APDU (%u bytes): "), apdu_len);
     dump_hex_large(apdu, apdu_len);
-    debug_log(green("Response Time: %lu"nl),nfc_timer.elapsed_ms(&nfc_timer));
 }

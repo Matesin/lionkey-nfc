@@ -116,7 +116,7 @@ typedef struct
     const uint8_t *cc_file;     /*!< CE context: contents of the CC file (to be initialised in the init function)*/
     uint16_t cc_file_len;       /*!< CE context: length of the CC file */
 
-    uint8_t *ndef_file;         /*!< CE context: contents of the NDEF file (to be initialised in the init function)*/
+    const uint8_t *ndef_file;         /*!< CE context: contents of the NDEF file (to be initialised in the init function)*/
     uint16_t ndef_file_len;     /*!< CE context: length of the NDEF file */
 
     uint16_t fid_cc;            /*!< CE context: file ID of the CC file (to be initialised in the init function) */
@@ -130,7 +130,8 @@ typedef struct
     uint16_t chain_len;                             /*!< CE context: remaining length of the response to be sent in the chain buffer (for responses larger than Le) */
     uint16_t negotiated_inf_len;                 /*!< CE context: frame size negotiated with the reader, used for determining the maximum response size that can be sent in one block without chaining */
 
-    bool     is_chaining;
+    bool     chaining_out;
+    bool     chaining_in;
     bool     extended;
 
     size_t resp_len_expexted;
