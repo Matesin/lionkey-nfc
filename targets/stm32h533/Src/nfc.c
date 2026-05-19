@@ -1,3 +1,45 @@
+/**
+ * @file nfc.c
+ * @brief NFC Type 4 Tag (T4T) card emulation via RFAL, handling ISO-DEP and APDU exchange.
+ *
+ * @author Matyas Martan
+ *
+ * This module implements:
+ * - NFC-A card emulation (CE mode) using RFAL library,
+ * - TX/RX state machine with error recovery,
+ * - ISO-DEP block framing and adaptation layer (rfal_nfc.c),
+ * - User presence detection and timing for CTAP,
+ * - Integration with NDEF and FIDO applet handling via ctap_nfc module (ctap_nfc.c).
+ *
+ * NFC State Machine Flow:
+ * NFC_DISCOVERY -> (PCD activates PICC) -> NFC_CE_ACTIVE -> *CE STATE MACHINE* -> NFC_START_DISCOVERY -> NFC_DISCOVERY
+ *
+ * CE State Machine Flow:
+ * Idle (CE_STATE_IDLE)
+    The card emulation layer is activated but no exchange has been initiated yet.
+    Initializes context. Transitions to CE_STATE_WAIT_RX when communication is
+    initialized.
+ * Wait RX (CE_STATE_WAIT_RX)
+    The device is listening for an incoming APDU from the PCD. The RFAL exchange
+    status is polled until a complete frame is received. Upon receiving a complete frame,
+    it transitions to PROCESS_RX. In case sleep is requested by the PCD, the state
+    machine goes to IDLE. Otherwise, if an unexpected error occurs (i.e. an incomplete
+    frame is received), it transitions to ERROR_RECOVERY.
+ * Process RX (CE_STATE_PROCESS_RX)
+    The received APDU is parsed and a response is constructed. Upon success, transmission
+    is initiated and the state advances to WAIT_TX.
+ * Wait TX (CE_STATE_WAIT_TX)
+    The device waits for the transmission of the response to complete, after which the
+    state returns to WAIT_RX to await the next command.
+ * Error Recovery (CE_STATE_ERROR_RECOVERY)
+    An unrecoverable protocol error has occurred. The session is terminated, and the
+    primary state machine transitions to NFC_START_DISCOVERY to reinitialize the
+    context for a new session.
+ */
+
+/************/
+/* INCLUDES */
+/************/
 #include "nfc.h"
 
 #include "ctap.h"
@@ -9,17 +51,26 @@
 #include "rfal_nfca.h"
 #include "eval_utils.h"
 
+/********************/
+/* GLOBAL VARIABLES */
+/********************/
 extern ctap_state_t app_ctap;
 
-/* NFC-A CE config */
-/* 4-byte UIDs with first byte 0x08 would need random number for the subsequent 3 bytes.
+/*******************/
+/* LOCAL VARIABLES */
+/*******************/
+
+/* NFC-A config:
+ * 4-byte UIDs with first byte 0x08 would need random number for the subsequent 3 bytes.
  * 4-byte UIDs with first byte 0x*F are Fixed number, not unique
  * 7-byte UIDs need a manufacturer ID and need to assure uniqueness of the rest.*/
-static const uint8_t NFCID[]     = {0x5F, 'L', 'N', 'K'};    /* =_LNK, 5F  4C  4E  4B NFCID1 / UID (4 bytes) - static value */
+static const uint8_t NFCID[]     = {0x5F, 'L', 'N', 'K'};    /* =_LNK, 5F  4C  4E  4B NFCID1 / UID (4 bytes) - first byte is fixed identifier, not random */
 static const uint8_t SENS_RES[]  = {0x44, 0x00};             /* SENS_RES / ATQA for 4-byte UID            */
 static const uint8_t SEL_RES     = 0x20U;                    /* SEL_RES / SAK - 0x20 propagate ISO-DEP support*/
 
-static eval_timer_t nfc_timer;
+#if LIONKEY_DEBUG_LEVEL > 1
+static eval_timer_t nfc_timer = CREATE_TIMER_STATIC;
+#endif
 /**
   * Ver : Indicates the NDEF mapping version <BR>
   * Nbr : Indicates the number of blocks that can be read <BR>
@@ -28,7 +79,7 @@ static eval_timer_t nfc_timer;
   * WriteFlag : Indicates whether a previous NDEF write procedure has finished or not <BR>
   * RWFlag : Indicates data can be updated or not <BR>
   * Ln : Is the size of the actual stored NDEF data in bytes <BR>
-  * Checksum : allows the Reader/Writer to check whether the Attribute Data are correct <BR>
+  * Checksum : allows the PCD to check whether the Attribute Data are correct <BR>
   */
 static const uint8_t CC_FILE[] = {  0x00, 0x0F,                                       /* CCLEN      */
                                     0x20,                                             /* T4T_VNo    */
@@ -54,24 +105,119 @@ static nfc_runtime_t nfc_runtime =
 };
 
 static rfalNfcDiscoverParam discParam;
-
 static rfalNfcState prev_rf_state = RFAL_NFC_STATE_IDLE;
 static bool prev_rf_state_valid = false;
 
+/*****************************/
+/* LOCAL FUNCTION PROTOTYPES */
+/*****************************/
+
+/**
+ * @brief Initialize the NFC parameters and starts the discovery loop using RFAL.
+ * Set up the NFC-A CE configuration, including SENS_RES, NFCID, SEL_RES, and ISO-DEP frame size.
+ * Register the RFAL NFC state change callback for debugging (if LIONKEY_DEBUG_LEVEL > 1).
+ *
+ * @return true if initialization succeeded, false otherwise
+ */
 static bool nfc_init_params(void);
+/**
+ * @brief Initialize the NFC session context, including the CC file, NDEF file, file IDs, and state variables.
+ */
 static void nfc_init_session(void);
+/**
+ * @brief RFAL NFC state change callback for logging state transitions and debugging
+ *
+ * @param st current RFAL NFC state
+ */
 static void nfc_notify(rfalNfcState st);
+
+/**
+ * @brief Card Emulation task
+ *
+ * @return true if the NFC session has ended and we should return to discovery mode
+ * @return false to continue the session
+ */
 static bool nfc_ce_task(void);
+
+/**
+ * @brief Starts the NFC reception process to receive a C-APDU from the PCD.
+ * Sets up the necessary state variables and buffers for reception.
+ *
+ * @return true if RX started successfully
+ * @return false otherwise
+ */
 static bool nfc_start_rx(void);
+
+/**
+ * @brief Start NFC transmission to send a R-APDU
+ *
+ * @param [in/out] tx_data buffer containing the APDU response to send to the PCD
+ * @param [in/out] tx_data_len length of the APDU response data in bytes
+ * @return true if TX started successfully
+ * @return false otherwise
+ */
 static bool nfc_start_tx(uint8_t *tx_data, uint16_t tx_data_len);
+
+/**
+ * @brief poll transmission status and handle errors should they occur.
+ *
+ * @return true if the RX process has completed and data is ready to be processed
+ * @return false otherwise
+ */
 static bool nfc_handle_wait_rx(void);
+
+/**
+ * @brief poll transmission status and handle errors should they occur.
+ *
+ * @return true if the received APDU has been processed and a response is ready to be sent
+ * @return false if tra
+ */
 static bool nfc_handle_wait_tx(void);
+
+/**
+ * @brief handle the received APDU, parse it, and build the appropriate response. Handle errors should they occur.
+ *
+ * @return true if the received APDU has been processed and the response has been sent
+ * @return false if still in process or an error has occured
+ */
 static bool nfc_handle_process_rx(void);
+
+/**
+ * @brief enter error recovery mode, log the error message, and reset the session to return to discovery mode.
+ *
+ * @param [in] msg error message to log before entering error recovery
+ * @param [in] err error code
+ */
 static void nfc_enter_error_recovery(const char* msg, ErrorStatus err);
-static void nfc_log_received_apdu(uint8_t* apdu, uint16_t apdu_len);
-static void nfc_log_sent_apdu(uint8_t* apdu, uint16_t apdu_len);
+
+/**
+ * @brief utilize RFAL to poll the current transmission status.
+ *
+ * @param [in] line transmission line to poll for status (RX or TX)
+ * @return true if transmission is over and no error has occured
+ * @return false if busy or an error has occured
+ */
 static bool nfc_poll_transmission_status(transmission_line_t line);
 
+/**
+ * @brief log the received APDU in hex.
+ *
+ * @param [in] apdu buffer containing the APDU to log
+ * @param [in] apdu_len length of the received APDU
+ */
+static void nfc_log_received_apdu(uint8_t* apdu, uint16_t apdu_len);
+
+/**
+ * @brief log the sent APDU in hex.
+ *
+ * @param [in] apdu buffer containing the APDU response to log
+ * @param [in] apdu_len length of the sent APDU
+ */
+static void nfc_log_sent_apdu(uint8_t* apdu, uint16_t apdu_len);
+
+/************************/
+/* FUNCTION DEFINITIONS */
+/************************/
 void nfc_init(void)
 {
     debug_log("initializing NFC..." nl);
@@ -84,7 +230,6 @@ void nfc_init(void)
     demoCeInit(NULL);
     #else
     nfc_init_session();
-    nfc_timer = create_timer();
     #endif
 
     info_log("NFC initialized" nl);
@@ -98,8 +243,10 @@ static bool nfc_init_params(void)
         rfalNfcDefaultDiscParams( &discParam );
 
         discParam.devLimit             = NFC_DEV_LIMIT;
-
+        #if LIONKEY_DEBUG_LEVEL > 1
         discParam.notifyCb             = nfc_notify;
+        #endif
+
         discParam.totalDuration        = NFC_DISC_DUR;
 
         /* Set configuration for NFC-A CE */
@@ -293,8 +440,8 @@ static bool nfc_handle_wait_rx(void)
         nfc_enter_error_recovery("APDU too large", 0);
         return false;
     }
-
     nfc_log_received_apdu(nfc_runtime.rx_data, *nfc_runtime.rcv_len);
+
     nfc_runtime.ce_state = CE_STATE_PROCESS_RX;
     return false;
 }
@@ -313,8 +460,7 @@ static bool nfc_handle_process_rx(void)
         nfc_enter_error_recovery("APDU response invalid", 0);
         return false;
     }
-
-
+    nfc_log_sent_apdu(nfc_runtime.tx_buf, nfc_runtime.tx_len);
     if (!nfc_start_tx(nfc_runtime.tx_buf, nfc_runtime.tx_len))
     {
         nfc_enter_error_recovery("Failed to start TX after processing RX", 69);
@@ -354,7 +500,7 @@ static bool nfc_start_rx(void)
     nfc_runtime.rx_data = NULL;
     nfc_runtime.rcv_len = NULL;
 
-    /* Receive the command from the reader */
+    /* Receive the command from the PCD */
     const ReturnCode err = rfalNfcDataExchangeStart(NULL, 0, &nfc_runtime.rx_data, &nfc_runtime.rcv_len, RFAL_FWT_NONE);
 
     if (err != RFAL_ERR_NONE)
@@ -435,6 +581,7 @@ static void nfc_enter_error_recovery(const char* msg, const ErrorStatus err)
     (void) rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
 }
 
+#if LIONKEY_DEBUG_LEVEL > 1
 static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
 {
     nfc_timer.start(&nfc_timer);
@@ -460,3 +607,16 @@ static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
     info_log(blue("Sent APDU (%u bytes): "), apdu_len);
     dump_hex_large(apdu, apdu_len);
 }
+#else
+static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
+{
+    (void) apdu;
+    (void) apdu_len;
+}
+
+static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
+{
+    (void) apdu;
+    (void) apdu_len;
+}
+#endif

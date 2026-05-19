@@ -2,7 +2,7 @@
 *
  * @file nfc.h
  *
- * @author Maty Martan
+ * @author Matyas Martan
  *
  * @brief Provides types and methods for the NFC peripheral used in LionKey
  *
@@ -116,7 +116,7 @@ typedef struct
     const uint8_t *cc_file;     /*!< CE context: contents of the CC file (to be initialised in the init function)*/
     uint16_t cc_file_len;       /*!< CE context: length of the CC file */
 
-    const uint8_t *ndef_file;         /*!< CE context: contents of the NDEF file (to be initialised in the init function)*/
+    uint8_t *ndef_file;         /*!< CE context: contents of the NDEF file (to be initialised in the init function)*/
     uint16_t ndef_file_len;     /*!< CE context: length of the NDEF file */
 
     uint16_t fid_cc;            /*!< CE context: file ID of the CC file (to be initialised in the init function) */
@@ -128,13 +128,13 @@ typedef struct
     uint8_t  chain_buf[CTAPHID_MAX_PAYLOAD_LENGTH]; /*!< CE context: buffer for building responses larger than Le */
     uint16_t chain_offset;                          /*!< CE context: offset in the chain buffer for the current response being built (for responses larger than Le) */
     uint16_t chain_len;                             /*!< CE context: remaining length of the response to be sent in the chain buffer (for responses larger than Le) */
-    uint16_t negotiated_inf_len;                 /*!< CE context: frame size negotiated with the reader, used for determining the maximum response size that can be sent in one block without chaining */
+    uint16_t negotiated_inf_len;                    /*!< CE context: frame size negotiated with the reader, used for determining the maximum response size that can be sent in one block without chaining */
+    bool     chaining_out;                          /*!< CE context: out-chaining flag */
+    bool     chaining_in;                           /*!< CE context: in-chaining flag */
 
-    bool     chaining_out;
-    bool     chaining_in;
-    bool     extended;
-
-    size_t resp_len_expexted;
+    /*! APDU context */
+    bool     extended;                              /*!< CE context: extended APDU in current context */
+    size_t resp_len_expexted;                       /*!< CE context: Le field of the received APDU (expected response length) */
 } t4t_context_t;
 
 /*! Runtime struct to hold the state of the NFC peripheral and its context */
@@ -149,7 +149,7 @@ typedef struct
     uint16_t tx_len;
 } nfc_runtime_t;
 
-/*! APDU structure (as per https://www.cardlogix.com/glossary/apdu-application-protocol-data-unit-smart-card/) */
+/*! APDU structure (refer to ISO/IEC 7816-4) */
 typedef struct {
     uint8_t  cla;           /* class */
     uint8_t  ins;           /* instruction */
@@ -168,7 +168,7 @@ typedef struct {
  *
  * @brief NFC Initialization
  *
- * Initializes the NFC peripheral and states necessary for Type 4 Tag emulation.
+ * Initialize the NFC peripheral and states necessary for Type 4 Tag emulation.
  *
  */
 void nfc_init(void);

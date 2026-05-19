@@ -1,24 +1,53 @@
-//
-// Created by Maty Martan on 11.03.2026.
-//
+/**
+ * @file ctap_nfc.c
+ * @brief CTAP-over-NFC APDU parsing and applet dispatch for Type 4 Tag emulation.
+ *
+ * @author Matyas Martan
+ *
+ * This module implements:
+ * - ISO7816 APDU parsing (short and extended forms),
+ * - FIDO applet selection and CTAP command transport over NFC
+*      (see https://fidoalliance.org/specs/fido-v2.3-ps-20260226/fido-client-to-authenticator-protocol-v2.3-ps-20260226.html),
+ * - NDEF applet command handling (SELECT / READ / UPDATE),
+ * - APDU response formatting including status words and short-response chaining.
+ *
+ * The transport layer (ISO-DEP block chaining, retransmissions, timing) is handled
+ * by RFAL. This module focuses on APDU-level behavior and CTAP payload routing.
+ */
+
+/************/
+/* INCLUDES */
+/************/
 #include <string.h>
 #include "terminal.h"
 #include "ctap_nfc.h"
 #include "ctap.h"
 #include "utils.h"
 
-static const uint8_t FIDO_AID[]  = { 0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01 };
-static const uint8_t NDEF_AID[]  = { 0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01 };
+/********************/
+/* GLOBAL VARIABLES */
+/********************/
+extern ctap_state_t app_ctap;
+bool isKeyGen = false;
+
+/**************************/
+/* LOCAL STATIC VARIABLES */
+/**************************/
+
 /*
- * FIDO version to be returned upon FIDO_AID is received (11.3.3)
+ * FIDO applet AID (11.3.3. Applet selection)
+ */
+static const uint8_t FIDO_AID[]  = { 0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01 };
+/*
+ * FIDO version to be returned upon FIDO_AID is received (11.3.3 Applet selection)
  *
- *  If the authenticator ONLY implements CTAP2, the device SHALL respond with "FIDO_2_0", or 0x4649444f5f325f30.
+ * If the authenticator ONLY implements CTAP2, the device SHALL respond with "FIDO_2_0", or 0x4649444f5f325f30.
  */
 static const uint8_t FIDO_VERSION[] = {'F', 'I', 'D', 'O', '_', '2', '_', '0'}; // FIDO_2_0
-
-extern ctap_state_t app_ctap;
-
-bool isKeyGen = false;
+/*
+ * NFC Forum NDEF Tag Application AID
+ */
+static const uint8_t NDEF_AID[]  = { 0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01 };
 
 static uint8_t nfc_ctap_response_buffer[CTAPHID_MAX_PAYLOAD_LENGTH];
 
@@ -27,19 +56,126 @@ static ctap_response_t nfc_ctap_response = {
     .data = &nfc_ctap_response_buffer[1]
 };
 
-/* read 2 bytes in big endian format from a buffer and return a 2-byte number */
+/******************************/
+/* STATIC FUNCTION PROTOTYPES */
+/******************************/
+/**
+ * @brief read 2 bytes in big endian format from a buffer and return a 2-byte number
+ *
+ * @param buf buffer containing the 2 bytes to read as a big-endian uint16_t
+ * @return the 2-byte number read from the buffer in big-endian format
+ */
 static inline uint16_t read_16be(const uint8_t *buf){ return ((uint16_t)buf[0] << 8) | buf[1];}
-
+/**
+ * @brief handle a received CTAP request using the CTAP API. Use the tx_buffer to send the result of the request.
+ * Start APDU chaining in case short APDU was used for the request and the response is larger than LE.
+ *
+ * @param [in/out] ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ * @param [in] data_in raw data received from the NFC
+ * @param [in] data_in_len length of the received data
+ * @param [out] tx_buf TX buffer
+*  @param [out] tx_buf_len length of the TX buffer
+ * @return response length
+ */
 static uint16_t fido_handle_ctap(t4t_context_t *ctx, const uint8_t *data_in, size_t data_in_len, uint8_t *tx_buf, uint16_t tx_buf_len);
+
+/**
+ * @brief handle a received extended CTAP APDU, update T4T context. Pass the request to fido_handle_ctap for processing and building the response.
+ *
+ * @param [in/out] ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ * @param [in] apdu parsed received APDU
+ * @param [out] tx_buf TX buffer
+ * @param [out] tx_buf_len length of the TX buffer
+ * @return response length
+ */
 static uint16_t fido_handle_ctap_request_extended(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
+
+/**
+ * @brief handle a received short CTAP APDU, update T4T context. Pass the request to fido_handle_ctap for processing and building the response.
+ *
+ * @param [in/out] ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ * @param [in] apdu parsed received APDU
+ * @param [out] tx_buf TX buffer
+ * @param [out] tx_buf_len length of the TX buffer
+ *
+ * @return total length of the response (payload + SW) if success
+ * @return 2-byte SW if fail
+ */
 static uint16_t fido_handle_ctap_request_short(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
-static uint16_t ndef_handle_select(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp);
-static uint16_t ndef_handle_read(const t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp, uint16_t rsp_len);
-static uint16_t ndef_handle_update(const t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf);
+
+/**
+ * @brief handle chaining out. Send the next chunk of the response from the chain buffer in T4T context. Return fail if there is no chaining.
+ *
+ * @cite ISO/IEC 7816-4:2020 section 5.2.3
+ *
+ * @param [in/out] ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ * @param [in] apdu parsed received APDU
+ * @param [out] tx_buf TX buffer
+ * @param [out] tx_buf_len length of the TX buffer
+ *
+ * @return total response length (payload + SW) if success
+ * @return 2-byte SW if fail (i.e., if there is no chaining in progress or if the APDU is malformed for chaining)
+ */
 static uint16_t fido_handle_ctap_chain_out(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
+
+/**
+ *
+ * @param [in/out] ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ * @param [in] apdu parsed received APDU
+ * @param [out] tx_buf TX buffer
+ * @param [out] tx_buf_len length of the TX buffer
+ *
+ * @return total response length (payload + SW) if success
+ */
 static uint16_t fido_handle_ctap_chain_in(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf, uint16_t tx_buf_len);
+
+/**
+ *
+ * @param [in/out] ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ * @param [in] apdu parsed received APDU
+ * @param [out] tx_buf TX buffer
+ * @return total response length (SW only -> 2B at all times)
+ */
+static uint16_t fido_handle_ctap_deselect(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf);
+
+/**
+ *
+ *
+ * @param [in/out] ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ * @param [in] apdu parsed received APDU
+ * @param [out] rsp response buffer
+ * @return total response length (in this case status word only, meaning two bytes)
+ */
+static uint16_t ndef_handle_select(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp);
+
+/**
+ *
+ * @param [in/out] ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ * @param [in] apdu parsed received APDU
+ * @param [out] rsp response buffer
+ * @param [out] rsp_len length of the response
+ * @return total response length
+ */
+static uint16_t ndef_handle_read(const t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp, uint16_t rsp_len);
+
+/**
+ *
+ * @param [in/out] ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ * @param [in] apdu parsed received APDU
+ * @param [out] tx_buf TX buffer
+ * @return total response length (in this case status word only, meaning two bytes)
+ */
+static uint16_t ndef_handle_update(const t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf);
+
+/**
+ *
+ * @param ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ */
 static void reset_chain(t4t_context_t *ctx);
 
+/********************/
+/* GLOBAL FUNCTIONS */
+/********************/
 apdu_parse_status_t nfc_parse_apdu(const uint8_t *raw, size_t raw_len, nfc_apdu_t *out) {
     /* check for valid structure */
     if ((raw == NULL) || (out == NULL))
@@ -358,6 +494,17 @@ static uint16_t fido_handle_ctap_chain_in(t4t_context_t *ctx, const nfc_apdu_t *
     return fido_handle_ctap(ctx, ctx->chain_buf, ctx->chain_len, tx_buf, tx_buf_len);
 }
 
+static uint16_t fido_handle_ctap_deselect(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *tx_buf)
+{
+    if (apdu->cla != NFC_CLA_CTAP || apdu->ins != NFC_INS_DESELECT)
+    {
+        return nfc_put_sw(tx_buf, NFC_SW_NOT_FOUND);
+    }
+    ctx->selected_app = APP_NONE;
+    reset_chain(ctx);
+    return nfc_put_sw(tx_buf, NFC_SW_OK);
+}
+
 static uint16_t ndef_handle_select(t4t_context_t *ctx, const nfc_apdu_t *apdu, uint8_t *rsp)
 {
     uint16_t fid;
@@ -420,7 +567,6 @@ static uint16_t ndef_handle_read(const t4t_context_t *ctx, const nfc_apdu_t *apd
 
     if (rsp_len < 2)
     {
-        // TODO: Better error handling
         return nfc_put_sw(rsp, NFC_SW_WRONG_LENGTH);
     }
 
@@ -500,15 +646,7 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
         return nfc_put_sw(tx_buf, NFC_SW_WRONG_LENGTH);
     } else debug_log(green("NFC: APDU parsed successfully") nl);
 
-    /* handle deselect - slightly more vague than in the definition */
-    if (apdu.ins == NFC_INS_DESELECT) {
-        ctx->selected_app  = APP_NONE;
-        ctx->selected_file = FILE_NONE;
-        ctx->chain_len     = 0U;
-        return nfc_put_sw(tx_buf, NFC_SW_OK);
-    }
-
-    /* handle handshake */
+    /* handle AID */
     if ((apdu.cla == NFC_CLA_ISO) &&
         (apdu.ins == NFC_INS_SELECT) &&
         (apdu.p1  == 0x04U) &&
@@ -558,20 +696,24 @@ uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx
             {
                 return fido_handle_ctap_chain_in(ctx, &apdu, tx_buf, tx_buf_len);
             }
-
-            if ((apdu.cla == NFC_CLA_CTAP) && (apdu.ins == NFC_INS_CTAP))
+            if (apdu.cla == NFC_CLA_CTAP)
             {
-                if (apdu.extended == true)
+                switch (apdu.ins)
                 {
-                    return fido_handle_ctap_request_extended(ctx, &apdu, tx_buf, tx_buf_len);
+                    case NFC_INS_DESELECT:
+                        return fido_handle_ctap_deselect(ctx, &apdu, tx_buf);
+                    case NFC_INS_CTAP:
+                        if (apdu.extended == true)
+                        {
+                            return fido_handle_ctap_request_extended(ctx, &apdu, tx_buf, tx_buf_len);
+                        }
+                        return fido_handle_ctap_request_short(ctx, &apdu, tx_buf, tx_buf_len);
+                    case NFC_INS_GET_RESPONSE:
+                        return fido_handle_ctap_chain_out(ctx, &apdu, tx_buf, tx_buf_len);
+                    default:
+                        return nfc_put_sw(tx_buf, NFC_SW_INS_NOT_SUPPORTED);
                 }
-                return fido_handle_ctap_request_short(ctx, &apdu, tx_buf, tx_buf_len);
             }
-            if ((apdu.cla == NFC_CLA_CTAP) && (apdu.ins == NFC_INS_GET_RESPONSE))
-            {
-                return fido_handle_ctap_chain_out(ctx, &apdu, tx_buf, tx_buf_len);
-            }
-            if (apdu.cla == NFC_CLA_CTAP) return nfc_put_sw(tx_buf, NFC_SW_INS_NOT_SUPPORTED);
 
             return nfc_put_sw(tx_buf, NFC_SW_CLA_NOT_SUPPORTED);
 
