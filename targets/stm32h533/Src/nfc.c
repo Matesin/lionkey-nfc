@@ -69,7 +69,7 @@ static const uint8_t SENS_RES[]  = {0x44, 0x00};             /* SENS_RES / ATQA 
 static const uint8_t SEL_RES     = 0x20U;                    /* SEL_RES / SAK - 0x20 propagate ISO-DEP support*/
 
 #if LIONKEY_DEBUG_LEVEL > 1
-static eval_timer_t nfc_timer;
+static eval_timer_t nfc_timer = CREATE_TIMER_STATIC;
 #endif
 /**
   * Ver : Indicates the NDEF mapping version <BR>
@@ -230,9 +230,6 @@ void nfc_init(void)
     demoCeInit(NULL);
     #else
     nfc_init_session();
-    #if LIONKEY_DEBUG_LEVEL > 1
-    nfc_timer = create_timer();
-    #endif
     #endif
 
     info_log("NFC initialized" nl);
@@ -443,9 +440,7 @@ static bool nfc_handle_wait_rx(void)
         nfc_enter_error_recovery("APDU too large", 0);
         return false;
     }
-    #if LIONKEY_DEBUG_LEVEL > 1
     nfc_log_received_apdu(nfc_runtime.rx_data, *nfc_runtime.rcv_len);
-    #endif
 
     nfc_runtime.ce_state = CE_STATE_PROCESS_RX;
     return false;
@@ -484,9 +479,7 @@ static bool nfc_handle_wait_tx(void)
 
     if ((nfc_runtime.rx_data != NULL) && (nfc_runtime.rcv_len != NULL) && (*nfc_runtime.rcv_len > 0U))
     {
-        #if LIONKEY_DEBUG_LEVEL > 1
         nfc_log_received_apdu(nfc_runtime.rx_data, *nfc_runtime.rcv_len);
-        #endif
         nfc_runtime.ce_state = CE_STATE_PROCESS_RX;
     }
     else
@@ -588,6 +581,7 @@ static void nfc_enter_error_recovery(const char* msg, const ErrorStatus err)
     (void) rfalNfcDeactivate(RFAL_NFC_DEACTIVATE_DISCOVERY);
 }
 
+#if LIONKEY_DEBUG_LEVEL > 1
 static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
 {
     nfc_timer.start(&nfc_timer);
@@ -613,3 +607,16 @@ static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
     info_log(blue("Sent APDU (%u bytes): "), apdu_len);
     dump_hex_large(apdu, apdu_len);
 }
+#else
+static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
+{
+    (void) apdu;
+    (void) apdu_len;
+}
+
+static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
+{
+    (void) apdu;
+    (void) apdu_len;
+}
+#endif
