@@ -515,20 +515,6 @@ static uint16_t ndef_handle_select(t4t_context_t *ctx, const nfc_apdu_t *apdu, u
         return nfc_put_sw(rsp, NFC_SW_WRONG_LENGTH);
     }
 
-    if ((apdu->p1 == 0x04U) && (apdu->p2 == 0x00U))
-    {
-        if ((apdu->lc == sizeof(NDEF_AID)) &&
-            (memcmp(apdu->data, NDEF_AID, sizeof(NDEF_AID))) == 0)
-        {
-            ctx->selected_app  = APP_NDEF;
-            ctx->selected_file = FILE_NONE;
-            return nfc_put_sw(rsp, NFC_SW_OK);
-        }
-
-        ctx->selected_file = FILE_NONE;
-        return nfc_put_sw(rsp, NFC_SW_FILE_NOT_FOUND);
-    }
-
     /* Select by file ID */
     if ((apdu->p1 == 0x00U) && (apdu->p2 == 0x0CU))
     {
