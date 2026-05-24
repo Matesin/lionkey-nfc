@@ -12,7 +12,6 @@
 #include "ctap_asn1.h"
 #include "ctap_pin_protocol.h"
 #include "ctap_credentials_store.h"
-#include "ctap_nfc.h"
 
 #include "compiler.h"
 
@@ -156,8 +155,8 @@ typedef struct ctap_state {
 
 	ctap_stateful_command_state_t stateful_command_state;
 
-	nfc_user_presence_timer_t nfc_timer;
-
+	bool nfc_user_present;
+	bool nfc_ctap_in_use;
 } ctap_state_t;
 
 LION_ATTR_ALWAYS_INLINE static inline bool ctap_is_pin_set(const ctap_state_t *const state) {

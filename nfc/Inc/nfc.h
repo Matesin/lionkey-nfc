@@ -20,10 +20,17 @@
 /* GLOBAL DEFINES */
 /*! NFC specific -------------------------------------------------------*/
 #define NDEF_SIZE           2048                            /*!< Max NDEF size emulated. Range: 0005h - 7FFFh    */
+#define TX_BUF_SIZE                      512U
+
+/* Instruction byte values */
 #define T4T_CLA_00          0x00                            /*!< CLA value for type 4 command                    */
 #define T4T_INS_SELECT      0xA4                            /*!< INS value for select command                    */
 #define T4T_INS_READ        0xB0                            /*!< INS value for reabbinary command                */
 #define T4T_INS_UPDATE      0xD6                            /*!< INS value for update command                    */
+#define NFC_INS_SELECT                          0xA4U
+#define NFC_INS_CTAP                            0x10U
+#define NFC_INS_DESELECT                        0x12U
+#define NFC_INS_GET_RESPONSE                    0xC0U
 
 #define FID_CC              0xE103                          /*!< File ID number for CCFile                       */
 #define FID_NDEF            0x0001                          /*!< File ID number for NDEF file                    */
@@ -49,7 +56,10 @@
 #define NFC_SW_WRONG_DATA                0x6A80U            /*!< Wrong data (e.g., invalid command data) */
 #define NFC_SW_FILE_SELECTED             0x6A84U            /*!< File already selected (e.g., trying to select a file that's already selected) */
 
-#define TX_BUF_SIZE                      512U
+/* Class byte values */
+#define NFC_CLA_ISO                             0x00U
+#define NFC_CLA_CTAP                            0x80U
+#define NFC_CLA_CTAP_CHAIN                      0x90U
 
 /* GLOBAL DEFINES */
 /*! Enums ------------------------------------------------------------*/
