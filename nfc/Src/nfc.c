@@ -50,12 +50,13 @@
 #include "utils.h"
 #include "rfal_nfca.h"
 #include "eval_utils.h"
+#include "nfc_utils.h"
+#include "ndef.h"
 
 /********************/
 /* GLOBAL VARIABLES */
 /********************/
-extern ctap_state_t app_ctap;
-
+static nfc_user_presence_timer_t user_presence_timer;
 /*******************/
 /* LOCAL VARIABLES */
 /*******************/
@@ -107,6 +108,22 @@ static nfc_runtime_t nfc_runtime =
 static rfalNfcDiscoverParam discParam;
 static rfalNfcState prev_rf_state = RFAL_NFC_STATE_IDLE;
 static bool prev_rf_state_valid = false;
+
+
+/*
+ * FIDO applet AID (11.3.3. Applet selection)
+ */
+static const uint8_t FIDO_AID[]  = { 0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01 };
+/*
+ * FIDO version to be returned upon FIDO_AID is received (11.3.3 Applet selection)
+ *
+ * If the authenticator ONLY implements CTAP2, the device SHALL respond with "FIDO_2_0", or 0x4649444f5f325f30.
+ */
+static const uint8_t FIDO_VERSION[] = {'F', 'I', 'D', 'O', '_', '2', '_', '0'}; // FIDO_2_0
+/*
+ * NFC Forum NDEF Tag Application AID
+ */
+static const uint8_t NDEF_AID[]  = { 0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01 };
 
 /*****************************/
 /* LOCAL FUNCTION PROTOTYPES */
@@ -214,6 +231,23 @@ static void nfc_log_received_apdu(uint8_t* apdu, uint16_t apdu_len);
  * @param [in] apdu_len length of the sent APDU
  */
 static void nfc_log_sent_apdu(uint8_t* apdu, uint16_t apdu_len);
+
+/**
+ *
+ * @brief NFC Parse And Respond
+ *
+ * Parses the received raw data from the input buffer and responds with the appropriate response based on the APDU command and the current state of the T4T context.
+ *
+ * @param ctx context of the T4T application, including selected app, files, and chain buffer for responses larger than Le
+ * @param rx_data raw data received from the NFC
+ * @param rx_data_len length of the received data
+ * @param tx_buf response buffer
+ * @param tx_buf_len length of the response buffer
+ *
+ * @return length of the response (in bytes)
+ */
+static uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx_data_len, uint8_t *tx_buf, uint16_t tx_buf_len );
+
 
 /************************/
 /* FUNCTION DEFINITIONS */
@@ -334,8 +368,6 @@ void app_nfc_task(void)
         {
             nfc_init_session();
             nfc_runtime.state = NFC_CE_ACTIVE;
-            // Upon detecting RF field, start the NFC-powered timer
-            ctap_nfc_start_user_presence_timer(&app_ctap.nfc_timer);
         }
         break;
 
@@ -345,10 +377,13 @@ void app_nfc_task(void)
             debug_log("NFC: session ended" nl);
             nfc_runtime.state = NFC_START_DISCOVERY;
             //user not present, set the user presence flag to false
-            ctap_nfc_stop_user_presence_timer(&app_ctap.nfc_timer);
+            ctap_nfc_stop_user_presence_timer(&user_presence_timer);
         }
         //check the timer, toggle user presence value if expired
-        ctap_nfc_is_user_presence_timer_expired(&app_ctap.nfc_timer);
+        if (ctap_nfc_is_user_presence_timer_expired(&user_presence_timer))
+        {
+            ctap_nfc_stop_user_presence_timer(&user_presence_timer);
+        }
         break;
 
     case NFC_NOTINIT:
@@ -607,6 +642,117 @@ static void nfc_log_sent_apdu(uint8_t* apdu, const uint16_t apdu_len)
     info_log(blue("Sent APDU (%u bytes): "), apdu_len);
     dump_hex_large(apdu, apdu_len);
 }
+
+static uint16_t nfc_parse_and_respond(t4t_context_t *ctx, uint8_t *rx_data, uint16_t rx_data_len, uint8_t *tx_buf, uint16_t tx_buf_len )
+{
+    nfc_apdu_t apdu;
+    apdu_parse_status_t err;
+
+    if ((ctx == NULL) || (tx_buf == NULL) || (tx_buf_len < 2U)) {
+        error_log(red("NFC: ERROR: Invalid response buffer") nl);
+        return NFC_PARSE_WRONG_SIZE;
+    }
+
+    /* parse APDU */
+    err = nfc_parse_apdu(rx_data, rx_data_len, &apdu);
+    if (err != APDU_PARSE_OK)
+    {
+        error_log(red("NFC: ERROR: Failed to parse APDU (Error code: %u)") nl, err);
+        return nfc_put_sw(tx_buf, NFC_SW_WRONG_LENGTH);
+    } else debug_log(green("NFC: APDU parsed successfully") nl);
+
+    /* handle AID */
+    if ((apdu.cla == NFC_CLA_ISO) &&
+        (apdu.ins == NFC_INS_SELECT) &&
+        (apdu.p1  == 0x04U) &&
+        (apdu.p2  == 0x00U))
+    {
+        if ((apdu.data) == NULL || (apdu.lc == 0U)) {
+            return nfc_put_sw(tx_buf, NFC_SW_WRONG_LENGTH);
+        }
+
+        /* FIDO selected (as per 11.3.3. Applet selection) */
+        if ((apdu.lc == sizeof(FIDO_AID)) &&
+            (memcmp(apdu.data, FIDO_AID, sizeof(FIDO_AID))) == 0)
+        {
+            ctx->selected_app  = APP_FIDO;
+            ctx->selected_file = FILE_NONE;
+            reset_chain(ctx); // reset any previous chaining state
+            debug_log(blue("NFC: FIDO AID selected") nl);
+            //start user presence timer once ctap is selected
+            ctap_nfc_start_user_presence_timer(&user_presence_timer);
+            /* return FIDO version*/
+            return nfc_build_response(FIDO_VERSION, sizeof(FIDO_VERSION), NFC_SW_OK, tx_buf, tx_buf_len);
+        }
+
+        /* NDEF selected, proceed with handshake */
+        if ((apdu.lc == sizeof(NDEF_AID)) &&
+            (memcmp(apdu.data, NDEF_AID, sizeof(NDEF_AID))) == 0)
+        {
+            ctx->selected_app  = APP_NDEF;
+            ctx->selected_file = FILE_NONE;
+            reset_chain(ctx);
+            debug_log(green("NFC: NDEF AID selected") nl);
+            return nfc_put_sw(tx_buf, NFC_SW_OK);
+        }
+
+        /* Unknown request */
+        ctx->selected_app  = APP_NONE;
+        ctx->selected_file = FILE_NONE;
+        return nfc_put_sw(tx_buf, NFC_SW_FILE_NOT_FOUND);
+    }
+
+    /* Decide on action based on the currently selected applet */
+    switch (ctx->selected_app)
+    {
+    case APP_FIDO:
+        /* first chunk of chaining in incoming */
+            if (((apdu.cla == NFC_CLA_CTAP_CHAIN) && (apdu.ins == NFC_INS_CTAP)) ||
+                (ctx->chaining_in == true))
+            {
+                return fido_handle_ctap_chain_in(ctx, &apdu, tx_buf, tx_buf_len);
+            }
+            if (apdu.cla == NFC_CLA_CTAP)
+            {
+                switch (apdu.ins)
+                {
+                    case NFC_INS_DESELECT:
+                        return fido_handle_ctap_deselect(ctx, &apdu, tx_buf);
+                    case NFC_INS_CTAP:
+                        if (apdu.extended == true)
+                        {
+                            return fido_handle_ctap_request_extended(ctx, &apdu, tx_buf, tx_buf_len);
+                        }
+                        return fido_handle_ctap_request_short(ctx, &apdu, tx_buf, tx_buf_len);
+                    case NFC_INS_GET_RESPONSE:
+                        return fido_handle_ctap_chain_out(ctx, &apdu, tx_buf, tx_buf_len);
+                    default:
+                        return nfc_put_sw(tx_buf, NFC_SW_INS_NOT_SUPPORTED);
+                }
+            }
+
+            return nfc_put_sw(tx_buf, NFC_SW_CLA_NOT_SUPPORTED);
+
+        case APP_NDEF:
+            switch (apdu.ins)
+            {
+                case T4T_INS_SELECT:
+                    debug_log(yellow("NDEF: SELECT")nl);
+                    return ndef_handle_select(ctx, &apdu, tx_buf);
+                case T4T_INS_READ:
+                    debug_log(yellow("NDEF: READ")nl);
+                    return ndef_handle_read(ctx, &apdu, tx_buf, tx_buf_len);
+                case T4T_INS_UPDATE:
+                    debug_log(yellow("NDEF: UPDATE")nl);
+                    return ndef_handle_update(ctx, &apdu, tx_buf);
+                default:
+                    return nfc_put_sw(tx_buf, NFC_SW_INS_NOT_SUPPORTED);
+            }
+        default:
+            return nfc_put_sw(tx_buf, NFC_SW_COND_NOT_SATISFIED);
+    }
+}
+
 #else
 static void nfc_log_received_apdu(uint8_t* apdu, const uint16_t apdu_len)
 {

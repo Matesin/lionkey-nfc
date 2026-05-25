@@ -166,7 +166,6 @@ target_sources(core PUBLIC
 		../../core/ctap_string.c
 		../../core/ctaphid.c
 		../../core/utils.c
-		../../core/ctap_nfc.c
 )
 target_include_directories(core PUBLIC ../../core Inc)
 target_link_libraries(core PUBLIC
@@ -266,6 +265,7 @@ target_sources(st25rfal PRIVATE
 		# platform config
 		${STEVAL_CONFIG_DIR}/Src/rfal_platform.c
 		${STEVAL_CONFIG_DIR}/Src/timer.c
+		${STEVAL_CONFIG_DIR}/Src/spi.c
 )
 
 target_link_libraries(st25rfal PUBLIC stm32cubemx core)
@@ -275,6 +275,22 @@ target_compile_definitions(st25rfal PUBLIC ST25R3916B=1)
 
 target_link_directories(${PROJECT_NAME} PRIVATE)
 
+set(NFC_DIR ../../nfc)
+
+add_library(nfc STATIC)
+
+target_include_directories(nfc PUBLIC
+		${NFC_DIR}/Inc
+)
+
+target_sources(nfc PRIVATE
+		${NFC_DIR}/Src/ndef.c
+		${NFC_DIR}/Src/nfc_utils.c
+		${NFC_DIR}/Src/nfc.c
+		${NFC_DIR}/Src/ctap_nfc.c
+)
+
+target_link_libraries(nfc PUBLIC st25rfal core)
 
 target_sources(${PROJECT_NAME} PRIVATE
 		Src/usb_descriptors.c
@@ -282,9 +298,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 		Src/app.c
 		Src/app_test.c
 		Src/flash_storage.c
-		Src/nfc.c
 		Src/nfc_test.c
-		Src/spi.c
 		Src/demo_ce.c
 		Src/eval_utils.c
 )
@@ -304,6 +318,7 @@ target_link_libraries(${PROJECT_NAME}
 		core
 		app_hw_crypto
 		st25rfal
+		nfc
 		# ctap_crypto_software
 )
 

@@ -2,7 +2,6 @@
 // Created by Maty Martan on 25.02.2026.
 //
 #include "spi.h"
-#include "main.h"
 
 static void spi_put_cs_low(void) { HAL_GPIO_WritePin(ST25R_SS_PORT, ST25R_SS_PIN, GPIO_PIN_RESET); }
 static void spi_put_cs_high(void) { HAL_GPIO_WritePin(ST25R_SS_PORT, ST25R_SS_PIN, GPIO_PIN_SET); }
