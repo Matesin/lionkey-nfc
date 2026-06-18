@@ -6,11 +6,11 @@
 
 A working implementation of the NFC technology into the existing stack of the LionKey hardware security key. Implemented using the ST25R3916B chip. 
 
-[!TIP] 
-The author of the base project is Ing. Martin Endler, see [pokusew/lionkey][LionKey Repo] for more information.
+> [!TIP] 
+> The author of the base project is Ing. Martin Endler, see [pokusew/lionkey][LionKey Repo] for more information.
 
-[!TIP]
-This project was made as a part of my bachelor's thesis at CTU FEE. To find out more about the implementation, see [Matesin/bachelor-thesis][Thesis]
+> [!TIP]
+> This project was made as a part of my bachelor's thesis at CTU FEE. To find out more about the implementation, see [Matesin/bachelor-thesis][Thesis]
 
 > [!WARNING]  
 > 🚧 This is still a work in progress. **The security key is already usable.**
