@@ -1,39 +1,20 @@
 <p align="center"><img src="./docs/assets/img/lionkey-logo-v2-no-padding.svg" title="LionKey" alt="LionKey logo" height="100"></p>
 
-# LionKey: An open-source FIDO2 USB Security Key
+# LionKey NFC: A wireless upgrade to LionKey
 
 [![website](https://img.shields.io/badge/docs-lionkey.dev-A6672A)](https://lionkey.dev/)
-[![build status](https://img.shields.io/github/actions/workflow/status/pokusew/lionkey/ci.yml?logo=github)](https://github.com/pokusew/lionkey/actions/workflows/ci.yml)
 
-A working [FIDO2]/[WebAuthn] USB hardware external authenticator (also called “security key”) 🔑
-implemented on STM32H533.
+A working implementation of the NFC technology into the existing stack of the LionKey hardware security key. Implemented using the ST25R3916B chip. 
 
-In terms of [WebAuthn], **LionKey** is a _roaming authenticator_ with _cross-platform attachment_
-using CTAP 2.1 over USB 2.0 (CTAPHID) as the communication protocol,
-supporting _user verification_ using PIN (CTAP2 ClientPIN),
-and capable of storing **passkeys** _(client-side discoverable credentials)_.
+[!TIP] 
+The author of the base project is Ing. Martin Endler, see [pokusew/lionkey][LionKey Repo] for more information.
 
-Key features:
-* **Fully compliant implementation of [CTAP 2.1].**
-  * Implements all mandatory features.
-  * Written in **C**.
-  * No dynamic memory allocations.
-  * Designed for use in resource-constrained environments.
-  * MCU independent, easily portable, can be used as a library (see the [core](./core) dir).
-  * The [core](./core) has just a single external dependency ([TinyCBOR]).
-* Runs on the **[NUCLEO-H533RE]** board with the **[STM32H533RET6]** MCU.
-* Uses [TinyUSB] library for the USB and USB HID implementation.
-* Uses [STM32CubeH5](#stm32cubeH5) (CMSIS, HAL, LL).
-* **Hardware-accelerated cryptography** on STM32H533 using the RNG, PKA, AES, SHA peripherals.
+[!TIP]
+This project was made as a part of my bachelor's thesis at CTU FEE. To find out more about the implementation, see [Matesin/bachelor-thesis][Thesis]
 
 > [!WARNING]  
 > 🚧 This is still a work in progress. **The security key is already usable.**
 > See the documentation at [lionkey.dev](https://lionkey.dev/). More detailed documentation will be added soon.
-
-> [!TIP]  
-> This project was originally created as my master's thesis at CTU FEE.
-> You can find the latest version of the thesis text in the [pokusew/fel-masters-thesis][Thesis] repository.
-
 
 ## Content
 
@@ -50,10 +31,6 @@ Key features:
 - [STM32CubeH5](#stm32cubeh5)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
-
-
-## Development
-
 
 ### Requirements
 
@@ -151,15 +128,9 @@ and the HAL (hardware abstraction layer) and LL (low-level) drivers for the STM3
 
 <!-- links references -->
 
-[Thesis]: https://github.com/pokusew/fel-masters-thesis
+[Thesis]: https://github.com/Matesin/bachelor-thesis
 
-[Thesis-PDF]: https://github.com/pokusew/fel-masters-thesis/raw/main/docs/FIDO2_USB_Security_Key.pdf
-
-[FIDO2]: https://fidoalliance.org/specifications/
-
-[WebAuthn]: https://w3c.github.io/webauthn/
-
-[CTAP 2.1]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html
+[LionKey Repo]: https://github.com/pokusew/lionkey
 
 [TinyCBOR]: https://github.com/intel/tinycbor
 
